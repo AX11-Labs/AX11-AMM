@@ -25,10 +25,7 @@ library PriceHelper {
      * @param binStep The bin step
      * @return price The price as a 128.128-binary fixed-point number
      */
-    function getPriceFromId(
-        uint24 id,
-        uint16 binStep
-    ) internal pure returns (uint256 price) {
+    function getPriceFromId(uint24 id, uint16 binStep) internal pure returns (uint256 price) {
         uint256 base = getBase(binStep);
         int256 exponent = getExponent(id);
 
@@ -41,10 +38,7 @@ library PriceHelper {
      * @param binStep The bin step
      * @return id The id
      */
-    function getIdFromPrice(
-        uint256 price,
-        uint16 binStep
-    ) internal pure returns (uint24 id) {
+    function getIdFromPrice(uint256 price, uint16 binStep) internal pure returns (uint24 id) {
         uint256 base = getBase(binStep);
         int256 realId = price.log2() / base.log2();
 
@@ -60,10 +54,7 @@ library PriceHelper {
      */
     function getBase(uint16 binStep) internal pure returns (uint256) {
         unchecked {
-            return
-                Constants.SCALE +
-                (uint256(binStep) << Constants.SCALE_OFFSET) /
-                Constants.BASIS_POINT_MAX;
+            return Constants.SCALE + (uint256(binStep) << Constants.SCALE_OFFSET) / Constants.BASIS_POINT_MAX;
         }
     }
 
@@ -83,14 +74,8 @@ library PriceHelper {
      * @param price The price with 18 decimals
      * @return price128x128 The 128.128-binary fixed-point number
      */
-    function convertDecimalPriceTo128x128(
-        uint256 price
-    ) internal pure returns (uint256) {
-        return
-            price.shiftDivRoundDown(
-                Constants.SCALE_OFFSET,
-                Constants.PRECISION
-            );
+    function convertDecimalPriceTo128x128(uint256 price) internal pure returns (uint256) {
+        return price.shiftDivRoundDown(Constants.SCALE_OFFSET, Constants.PRECISION);
     }
 
     /**
@@ -98,13 +83,7 @@ library PriceHelper {
      * @param price128x128 The 128.128-binary fixed-point number
      * @return price The price with 18 decimals
      */
-    function convert128x128PriceToDecimal(
-        uint256 price128x128
-    ) internal pure returns (uint256) {
-        return
-            price128x128.mulShiftRoundDown(
-                Constants.PRECISION,
-                Constants.SCALE_OFFSET
-            );
+    function convert128x128PriceToDecimal(uint256 price128x128) internal pure returns (uint256) {
+        return price128x128.mulShiftRoundDown(Constants.PRECISION, Constants.SCALE_OFFSET);
     }
 }

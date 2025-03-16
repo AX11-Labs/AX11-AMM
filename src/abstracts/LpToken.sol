@@ -11,9 +11,7 @@ abstract contract LpToken is ILpToken, IERC20Metadata {
     //account -> tokenId -> balance
     mapping(address => mapping(uint256 => uint256)) public override balanceOf;
     //owner -> spender -> tokenId -> value
-    mapping(address => mapping(address => mapping(uint256 => uint256)))
-        public
-        override allowance;
+    mapping(address => mapping(address => mapping(uint256 => uint256))) public override allowance;
     //owner -> tokenId -> nonce
     mapping(address => mapping(uint256 => uint256)) public override nonces;
 
@@ -36,22 +34,14 @@ abstract contract LpToken is ILpToken, IERC20Metadata {
         return 18;
     }
 
-    function approve(
-        address spender,
-        uint256 tokenId,
-        uint256 value
-    ) public override returns (bool) {
+    function approve(address spender, uint256 tokenId, uint256 value) public override returns (bool) {
         address owner = msg.sender;
         allowance[owner][spender][tokenId] = value;
         emit Approval(owner, spender, tokenId, value);
         return true;
     }
 
-    function transfer(
-        address to,
-        uint256 tokenId,
-        uint256 value
-    ) public override returns (bool) {
+    function transfer(address to, uint256 tokenId, uint256 value) public override returns (bool) {
         balanceOf[msg.sender][tokenId] -= value;
         unchecked {
             balanceOf[to][tokenId] += value;
@@ -59,12 +49,7 @@ abstract contract LpToken is ILpToken, IERC20Metadata {
         return true;
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        uint256 value
-    ) public override returns (bool) {
+    function transferFrom(address from, address to, uint256 tokenId, uint256 value) public override returns (bool) {
         address spender = msg.sender;
         allowance[from][spender][tokenId] -= value;
         balanceOf[from][tokenId] -= value;
@@ -114,10 +99,7 @@ abstract contract LpToken is ILpToken, IERC20Metadata {
                 s
             );
 
-            require(
-                recoveredAddress != address(0) && recoveredAddress == owner,
-                "INVALID_SIGNER"
-            );
+            require(recoveredAddress != address(0) && recoveredAddress == owner, "INVALID_SIGNER");
 
             allowance[owner][spender][tokenId] = value;
         }
@@ -127,23 +109,19 @@ abstract contract LpToken is ILpToken, IERC20Metadata {
     }
 
     function DOMAIN_SEPARATOR() public view override returns (bytes32) {
-        return
-            block.chainid == INITIAL_CHAIN_ID
-                ? INITIAL_DOMAIN_SEPARATOR
-                : computeDomainSeparator();
+        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : computeDomainSeparator();
     }
 
     function computeDomainSeparator() private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f, //keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-                    keccak256(bytes(name)),
-                    0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6, //keccak256("1")
-                    block.chainid,
-                    address(this)
-                )
-            );
+        return keccak256(
+            abi.encode(
+                0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f, //keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+                keccak256(bytes(name)),
+                0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6, //keccak256("1")
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     // ------- mint & burn ------

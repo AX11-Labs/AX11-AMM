@@ -3,51 +3,21 @@
 pragma solidity 0.8.28;
 
 interface ILpToken {
-    event Transfer(
-        address sender,
-        address recipient,
-        uint256 tokenId,
-        uint256 amount
-    );
+    event Transfer(address sender, address recipient, uint256 tokenId, uint256 amount);
 
-    event Approval(
-        address owner,
-        address spender,
-        uint256 tokenId,
-        uint256 amount
-    );
+    event Approval(address owner, address spender, uint256 tokenId, uint256 amount);
 
     function totalSupply(uint256 tokenId) external view returns (uint256);
 
-    function balanceOf(
-        address account,
-        uint256 tokenId
-    ) external view returns (uint256);
+    function balanceOf(address account, uint256 tokenId) external view returns (uint256);
 
-    function allowance(
-        address owner,
-        address spender,
-        uint256 tokenId
-    ) external view returns (uint256);
+    function allowance(address owner, address spender, uint256 tokenId) external view returns (uint256);
 
-    function approve(
-        address spender,
-        uint256 tokenId,
-        uint256 value
-    ) external returns (bool);
+    function approve(address spender, uint256 tokenId, uint256 value) external returns (bool);
 
-    function transfer(
-        address to,
-        uint256 tokenId,
-        uint256 value
-    ) external returns (bool);
+    function transfer(address to, uint256 tokenId, uint256 value) external returns (bool);
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        uint256 value
-    ) external returns (bool);
+    function transferFrom(address from, address to, uint256 tokenId, uint256 value) external returns (bool);
 
     function permit(
         address owner,

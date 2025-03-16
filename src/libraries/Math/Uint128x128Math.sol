@@ -67,11 +67,7 @@ library Uint128x128Math {
             if (y != LOG_SCALE) {
                 // Calculate the fractional part via the iterative approximation.
                 // The "delta >>= 1" part is equivalent to "delta /= 2", but shifting bits is faster.
-                for (
-                    int256 delta = int256(1 << (LOG_SCALE_OFFSET - 1));
-                    delta > 0;
-                    delta >>= 1
-                ) {
+                for (int256 delta = int256(1 << (LOG_SCALE_OFFSET - 1)); delta > 0; delta >>= 1) {
                     y = (y * y) >> LOG_SCALE_OFFSET;
 
                     // Is y^2 > 2 and so in the range [2,4)?
@@ -118,85 +114,45 @@ library Uint128x128Math {
                     invert := iszero(invert)
                 }
 
-                if and(absY, 0x1) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x1) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x2) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x2) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x4) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x4) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x8) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x8) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x10) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x10) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x20) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x20) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x40) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x40) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x80) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x80) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x100) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x100) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x200) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x200) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x400) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x400) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x800) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x800) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x1000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x1000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x2000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x2000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x4000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x4000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x8000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x8000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x10000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x10000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x20000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x20000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x40000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x40000) { result := shr(128, mul(result, squared)) }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x80000) {
-                    result := shr(128, mul(result, squared))
-                }
+                if and(absY, 0x80000) { result := shr(128, mul(result, squared)) }
             }
         }
 

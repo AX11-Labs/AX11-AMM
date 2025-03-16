@@ -6,6 +6,7 @@ pragma solidity 0.8.28;
  * @author Trader Joe
  * @notice Helper contract used for bit calculations
  */
+
 library BitMath {
     /**
      * @dev Returns the index of the closest bit on the right of x that is non null
@@ -14,10 +15,7 @@ library BitMath {
      * @return id The index of the closest non null bit on the right of x.
      * If there is no closest bit, it returns max(uint256)
      */
-    function closestBitRight(
-        uint256 x,
-        uint8 bit
-    ) internal pure returns (uint256 id) {
+    function closestBitRight(uint256 x, uint8 bit) internal pure returns (uint256 id) {
         unchecked {
             uint256 shift = 255 - bit;
             x <<= shift;
@@ -34,10 +32,7 @@ library BitMath {
      * @return id The index of the closest non null bit on the left of x.
      * If there is no closest bit, it returns max(uint256)
      */
-    function closestBitLeft(
-        uint256 x,
-        uint8 bit
-    ) internal pure returns (uint256 id) {
+    function closestBitLeft(uint256 x, uint8 bit) internal pure returns (uint256 id) {
         unchecked {
             x >>= bit;
 
@@ -81,9 +76,7 @@ library BitMath {
                 x := shr(2, x)
                 msb := add(msb, 2)
             }
-            if gt(x, 0x1) {
-                msb := add(msb, 1)
-            }
+            if gt(x, 0x1) { msb := add(msb, 1) }
         }
     }
 
@@ -130,9 +123,7 @@ library BitMath {
                 x := sx
                 lsb := add(lsb, 2)
             }
-            if iszero(iszero(shl(1, x))) {
-                lsb := add(lsb, 1)
-            }
+            if iszero(iszero(shl(1, x))) { lsb := add(lsb, 1) }
 
             lsb := sub(255, lsb)
         }

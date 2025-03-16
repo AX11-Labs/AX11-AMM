@@ -21,9 +21,7 @@ library TransferHelper {
     function safeTransferETH(address to, uint256 amount) internal {
         /// @solidity memory-safe-assembly
         assembly {
-            if iszero(
-                call(gas(), to, amount, codesize(), 0x00, codesize(), 0x00)
-            ) {
+            if iszero(call(gas(), to, amount, codesize(), 0x00, codesize(), 0x00)) {
                 mstore(0x00, 0xb12d13eb) // `ETHTransferFailed()`.
                 revert(0x1c, 0x04)
             }
@@ -38,12 +36,7 @@ library TransferHelper {
     ///
     /// The `from` account must have at least `amount` approved for
     /// the current contract to manage.
-    function safeTransferFrom(
-        address token,
-        address from,
-        address to,
-        uint256 amount
-    ) internal {
+    function safeTransferFrom(address token, address from, address to, uint256 amount) internal {
         /// @solidity memory-safe-assembly
         assembly {
             let m := mload(0x40) // Cache the free memory pointer.
@@ -53,12 +46,7 @@ library TransferHelper {
             mstore(0x0c, 0x23b872dd000000000000000000000000) // `transferFrom(address,address,uint256)`.
             let success := call(gas(), token, 0, 0x1c, 0x64, 0x00, 0x20)
             if iszero(and(eq(mload(0x00), 1), success)) {
-                if iszero(
-                    lt(
-                        or(iszero(extcodesize(token)), returndatasize()),
-                        success
-                    )
-                ) {
+                if iszero(lt(or(iszero(extcodesize(token)), returndatasize()), success)) {
                     mstore(0x00, 0x7939f424) // `TransferFromFailed()`.
                     revert(0x1c, 0x04)
                 }
@@ -79,12 +67,7 @@ library TransferHelper {
             // Perform the transfer, reverting upon failure.
             let success := call(gas(), token, 0, 0x10, 0x44, 0x00, 0x20)
             if iszero(and(eq(mload(0x00), 1), success)) {
-                if iszero(
-                    lt(
-                        or(iszero(extcodesize(token)), returndatasize()),
-                        success
-                    )
-                ) {
+                if iszero(lt(or(iszero(extcodesize(token)), returndatasize()), success)) {
                     mstore(0x00, 0x90b8ec18) // `TransferFailed()`.
                     revert(0x1c, 0x04)
                 }

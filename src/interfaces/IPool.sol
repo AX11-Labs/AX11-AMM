@@ -4,8 +4,8 @@ pragma solidity 0.8.28;
 
 interface IPool {
     struct BinInfo {
-        uint104 bin_share0;
-        uint104 bin_share1;
+        uint104 liquidity0;
+        uint104 liquidity1;
         int24 tilLower;
         int24 tilUpper;
     }
@@ -28,10 +28,8 @@ interface IPool {
     //     uint16 groupsId
     // ) external view returns (uint24 avgBin, uint128 reserve0, uint128 reserve1);
 
-    function mint(
-        address recipient,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 deadline
-    ) external payable returns (uint256 amountA, uint256 amountB);
+    function mint(address recipient, uint256 amount0, uint256 amount1, uint256 deadline)
+        external
+        payable
+        returns (uint256 amountA, uint256 amountB);
 }

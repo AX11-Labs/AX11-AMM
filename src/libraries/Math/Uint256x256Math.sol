@@ -24,11 +24,7 @@ library Uint256x256Math {
      * @param denominator The divisor as an uint256
      * @return result The result as an uint256
      */
-    function mulDivRoundDown(
-        uint256 x,
-        uint256 y,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function mulDivRoundDown(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
         (uint256 prod0, uint256 prod1) = _getMulProds(x, y);
 
         return _getEndOfDivRoundDown(x, y, denominator, prod0, prod1);
@@ -48,11 +44,7 @@ library Uint256x256Math {
      * @param denominator The divisor as an uint256
      * @return result The result as an uint256
      */
-    function mulDivRoundUp(
-        uint256 x,
-        uint256 y,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function mulDivRoundUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
         result = mulDivRoundDown(x, y, denominator);
         if (mulmod(x, y, denominator) != 0) result += 1;
     }
@@ -71,18 +63,15 @@ library Uint256x256Math {
      * @param offset The offset as an uint256, can't be greater than 256
      * @return result The result as an uint256
      */
-    function mulShiftRoundDown(
-        uint256 x,
-        uint256 y,
-        uint8 offset
-    ) internal pure returns (uint256 result) {
+    function mulShiftRoundDown(uint256 x, uint256 y, uint8 offset) internal pure returns (uint256 result) {
         (uint256 prod0, uint256 prod1) = _getMulProds(x, y);
 
         if (prod0 != 0) result = prod0 >> offset;
         if (prod1 != 0) {
             // Make sure the result is less than 2^256.
-            if (prod1 >= 1 << offset)
+            if (prod1 >= 1 << offset) {
                 revert Uint256x256Math__MulShiftOverflow();
+            }
 
             unchecked {
                 result += prod1 << (256 - offset);
@@ -104,11 +93,7 @@ library Uint256x256Math {
      * @param offset The offset as an uint256, can't be greater than 256
      * @return result The result as an uint256
      */
-    function mulShiftRoundUp(
-        uint256 x,
-        uint256 y,
-        uint8 offset
-    ) internal pure returns (uint256 result) {
+    function mulShiftRoundUp(uint256 x, uint256 y, uint8 offset) internal pure returns (uint256 result) {
         result = mulShiftRoundDown(x, y, offset);
         if (mulmod(x, y, 1 << offset) != 0) result += 1;
     }
@@ -127,11 +112,7 @@ library Uint256x256Math {
      * @param denominator The divisor as an uint256
      * @return result The result as an uint256
      */
-    function shiftDivRoundDown(
-        uint256 x,
-        uint8 offset,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function shiftDivRoundDown(uint256 x, uint8 offset, uint256 denominator) internal pure returns (uint256 result) {
         uint256 prod0;
         uint256 prod1;
 
@@ -157,11 +138,7 @@ library Uint256x256Math {
      * @param denominator The divisor as an uint256
      * @return result The result as an uint256
      */
-    function shiftDivRoundUp(
-        uint256 x,
-        uint8 offset,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function shiftDivRoundUp(uint256 x, uint8 offset, uint256 denominator) internal pure returns (uint256 result) {
         result = shiftDivRoundDown(x, offset, denominator);
         if (mulmod(x, 1 << offset, denominator) != 0) result += 1;
     }
@@ -173,10 +150,7 @@ library Uint256x256Math {
      * @return prod0 The least significant 256 bits of the product
      * @return prod1 The most significant 256 bits of the product
      */
-    function _getMulProds(
-        uint256 x,
-        uint256 y
-    ) private pure returns (uint256 prod0, uint256 prod1) {
+    function _getMulProds(uint256 x, uint256 y) private pure returns (uint256 prod0, uint256 prod1) {
         // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use
         // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256
         // variables such that product = prod1 * 2^256 + prod0.
@@ -196,13 +170,11 @@ library Uint256x256Math {
      * @param prod1 The most significant 256 bits of the product
      * @return result The result as an uint256
      */
-    function _getEndOfDivRoundDown(
-        uint256 x,
-        uint256 y,
-        uint256 denominator,
-        uint256 prod0,
-        uint256 prod1
-    ) private pure returns (uint256 result) {
+    function _getEndOfDivRoundDown(uint256 x, uint256 y, uint256 denominator, uint256 prod0, uint256 prod1)
+        private
+        pure
+        returns (uint256 result)
+    {
         // Handle non-overflow cases, 256 by 256 division
         if (prod1 == 0) {
             unchecked {

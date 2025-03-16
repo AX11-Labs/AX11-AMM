@@ -3,10 +3,7 @@
 pragma solidity 0.8.28;
 
 library FeeTier {
-    function getFee(
-        uint256 priceRange,
-        uint256 value
-    ) internal pure returns (uint256 feeAmount) {
+    function getFee(uint256 priceRange, uint256 value) internal pure returns (uint256 feeAmount) {
         if (priceRange < 65) {
             feeAmount = value * 10;
         } else if (priceRange < 129) {

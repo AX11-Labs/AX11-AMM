@@ -20,6 +20,5 @@ library Constants {
     uint256 internal constant BASIS_POINT_MAX = 10_000;
 
     /// @dev The expected return after a successful flash loan
-    bytes32 internal constant CALLBACK_SUCCESS =
-        keccak256("LBPair.onFlashLoan");
+    bytes32 internal constant CALLBACK_SUCCESS = keccak256("LBPair.onFlashLoan");
 }
