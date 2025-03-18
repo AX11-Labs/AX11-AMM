@@ -46,7 +46,7 @@ contract Pool is LpToken, IPool {
         initializer = _initializer;
     }
 
-    function initialize(int24 _activeBin) external {
+    function initialize(int24 _activeBin) external nonReentrant {
         address sender = msg.sender;
         require(reserve0 == 0 && reserve1 == 0, "INITIALIZED");
         require(_activeBin >= -65024 && _activeBin <= 65023, "INVALID_INIT_PRICE");
@@ -80,6 +80,7 @@ contract Pool is LpToken, IPool {
     function mint(uint256 amount0, uint256 amount1, address recipient, uint256 deadline)
         external
         ensure(deadline)
+        nonReentrant
         returns (uint256 amountA, uint256 amountB)
     {
         address sender = msg.sender;
@@ -103,6 +104,7 @@ contract Pool is LpToken, IPool {
     function burn(uint256 amount0, uint256 amount1, address recipient, uint256 deadline)
         external
         ensure(deadline)
+        nonReentrant
         returns (uint256 amountA, uint256 amountB)
     {
         address sender = msg.sender;
