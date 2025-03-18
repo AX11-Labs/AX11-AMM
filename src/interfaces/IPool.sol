@@ -4,8 +4,8 @@ pragma solidity 0.8.28;
 
 interface IPool {
     struct BinInfo {
-        uint104 liquidity0;
-        uint104 liquidity1;
+        uint104 share0;
+        uint104 share1;
         int24 tilLower;
         int24 tilUpper;
     }
