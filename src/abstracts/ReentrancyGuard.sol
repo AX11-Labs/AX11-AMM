@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.28;
 
 /// @notice Reentrancy guard mixin.
 /// @author Soledge (https://github.com/vectorized/soledge/blob/main/src/utils/ReentrancyGuard.sol)

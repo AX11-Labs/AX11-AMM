@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 
 import {IFactory} from "./interfaces/IFactory.sol";
 import {Pool} from "./Pool.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
+import {IERC20Metadata} from "./interfaces/IERC20Metadata.sol";
 
 contract Factory is IFactory {
     error INVALID_ADDRESS();

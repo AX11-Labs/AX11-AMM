@@ -2,10 +2,12 @@
 
 pragma solidity 0.8.28;
 
+import {IERC20Metadata} from "./IERC20Metadata.sol";
+
 /// @title Interface for Ax11 LP Token
 /// @notice This interface defines the core functionality for the Ax11 LP token, including ERC20-like operations
 /// with support for long and short positions
-interface IAx11Lp {
+interface IAx11Lp is IERC20Metadata {
     /// @notice Error thrown when attempting to transfer tokens without sufficient allowance
     error INSUFFICIENT_ALLOWANCE();
 
@@ -41,18 +43,6 @@ interface IAx11Lp {
     /// @param shortX The amount of short position X tokens transferred
     /// @param shortY The amount of short position Y tokens transferred
     event Transfer(address indexed from, address indexed to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY);
-
-    /// @notice Returns the name of the token
-    /// @return The name of the token as a string
-    function name() external view returns (string memory);
-
-    /// @notice Returns the symbol of the token
-    /// @return The symbol of the token as a string
-    function symbol() external view returns (string memory);
-
-    /// @notice Returns the number of decimals the token uses
-    /// @return The number of decimals used by the token
-    function decimals() external view returns (uint8);
 
     /// @notice Returns the total supply of LP tokens
     /// @return longX The total amount of long position X tokens
