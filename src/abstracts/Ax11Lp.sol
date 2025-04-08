@@ -51,7 +51,6 @@ abstract contract Ax11Lp is IAx11Lp {
         symbol = _symbol;
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
-        // mint 512 to the zero address
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -78,26 +77,23 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @return A boolean indicating whether the transfer succeeded
     function transfer(address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY) public returns (bool) {
         require(to != address(this), INVALID_ADDRESS());
-        if (to == address(0)) {
-            _burn(msg.sender, longX, longY, shortX, shortY);
-        } else {
-            LpInfo storage lpInfo_from = balanceOf[msg.sender];
-            lpInfo_from.longX -= longX;
-            lpInfo_from.longY -= longY;
-            lpInfo_from.shortX -= shortX;
-            lpInfo_from.shortY -= shortY;
 
-            LpInfo storage lpInfo_to = balanceOf[to];
-            // Cannot overflow because the sum of all user
-            // balances can't exceed the max uint256 value.
-            unchecked {
-                lpInfo_to.longX += longX;
-                lpInfo_to.longY += longY;
-                lpInfo_to.shortX += shortX;
-                lpInfo_to.shortY += shortY;
-            }
-            emit Transfer(msg.sender, to, longX, longY, shortX, shortY);
+        LpInfo storage lpInfo_from = balanceOf[msg.sender];
+        lpInfo_from.longX -= longX;
+        lpInfo_from.longY -= longY;
+        lpInfo_from.shortX -= shortX;
+        lpInfo_from.shortY -= shortY;
+
+        LpInfo storage lpInfo_to = balanceOf[to];
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            lpInfo_to.longX += longX;
+            lpInfo_to.longY += longY;
+            lpInfo_to.shortX += shortX;
+            lpInfo_to.shortY += shortY;
         }
+        emit Transfer(msg.sender, to, longX, longY, shortX, shortY);
 
         return true;
     }
@@ -116,26 +112,24 @@ abstract contract Ax11Lp is IAx11Lp {
     {
         require(to != address(this), INVALID_ADDRESS());
         require(allowance[from][msg.sender] == true, INSUFFICIENT_ALLOWANCE());
-        if (to == address(0)) {
-            _burn(from, longX, longY, shortX, shortY);
-        } else {
-            LpInfo storage lpInfo_from = balanceOf[from];
-            lpInfo_from.longX -= longX;
-            lpInfo_from.longY -= longY;
-            lpInfo_from.shortX -= shortX;
-            lpInfo_from.shortY -= shortY;
 
-            LpInfo storage lpInfo_to = balanceOf[to];
-            // Cannot overflow because the sum of all user
-            // balances can't exceed the max uint256 value.
-            unchecked {
-                lpInfo_to.longX += longX;
-                lpInfo_to.longY += longY;
-                lpInfo_to.shortX += shortX;
-                lpInfo_to.shortY += shortY;
-            }
-            emit Transfer(from, to, longX, longY, shortX, shortY);
+        LpInfo storage lpInfo_from = balanceOf[from];
+        lpInfo_from.longX -= longX;
+        lpInfo_from.longY -= longY;
+        lpInfo_from.shortX -= shortX;
+        lpInfo_from.shortY -= shortY;
+
+        LpInfo storage lpInfo_to = balanceOf[to];
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            lpInfo_to.longX += longX;
+            lpInfo_to.longY += longY;
+            lpInfo_to.shortX += shortX;
+            lpInfo_to.shortY += shortY;
         }
+        emit Transfer(from, to, longX, longY, shortX, shortY);
+
         return true;
     }
 
