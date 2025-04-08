@@ -8,13 +8,8 @@ import {IERC20} from "./interfaces/IERC20.sol";
 
 contract Factory is IFactory {
     error INVALID_ADDRESS();
-    /// token0 => token1 => poolAddress
-    ///@notice token0 and token1 must be sorted
 
     mapping(IERC20 token0 => mapping(IERC20 token1 => address pool)) public override getPool;
-
-    /// poolAddress => token0,token1
-    ///@notice return in sorted order
     mapping(address => PoolInfo) public override getTokens;
 
     uint256 public override totalPools;
@@ -39,13 +34,10 @@ contract Factory is IFactory {
         pool = address(new Pool{salt: keccak256(abi.encodePacked(token0, token1))}(token0, token1, _name, _symbol));
 
         getPool[token0][token1] = pool;
-        getPool[token1][token0] = pool;
-        // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
+        getPool[token1][token0] = pool; // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
+        getTokens[pool] = PoolInfo({token0: token0, token1: token1});
 
-        uint256 _totalPools = totalPools + 1;
-
-        totalPools = _totalPools;
-        getTokens[pool] = PoolInfo({token0: token0, token1: token1, poolId: _totalPools});
+        totalPools++;
 
         emit PoolCreated(token0, token1, pool);
     }

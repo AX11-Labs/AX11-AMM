@@ -10,7 +10,6 @@ interface IFactory {
     struct PoolInfo {
         IERC20 token0;
         IERC20 token1;
-        uint256 poolId;
     }
 
     function getPool(IERC20 token0, IERC20 token1) external view returns (address pool);

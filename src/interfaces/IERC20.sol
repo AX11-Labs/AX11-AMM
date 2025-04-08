@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// @notice credit to Uniswap https://github.com/Uniswap/v3-core/blob/main/contracts/interfaces/IERC20Minimal.sol
-/// @dev we also add metadata
-pragma solidity >=0.5.0;
+pragma solidity 0.8.28;
 
-/// @title Minimal ERC20 interface delivered from Uniswap V3 core with additional metadata
-/// @notice Contains a subset of the full ERC20 interface that is used in Uniswap V3
+/// @title Minimal ERC20 interface with metadata
+/// @notice Contains a subset of the full ERC20 interface
 interface IERC20 {
+    /// @notice Returns the name of the token
+    /// @return The name of the token as a string
     function name() external view returns (string memory);
 
+    /// @notice Returns the symbol of the token
+    /// @return The symbol of the token as a string
     function symbol() external view returns (string memory);
 
+    /// @notice Returns the number of decimals the token uses
+    /// @return The number of decimals used by the token
     function decimals() external view returns (uint8);
+
     /// @notice Returns the balance of a token
     /// @param account The account for which to look up the number of tokens it has, i.e. its balance
     /// @return The number of tokens held by the account

@@ -3,9 +3,9 @@
 pragma solidity 0.8.28;
 
 import {ILpToken} from "../interfaces/ILpToken.sol";
-import {IERC20Metadata} from "../interfaces/IERC20Metadata.sol";
+import {IERC20} from "../interfaces/IERC20.sol";
 
-abstract contract LpToken is ILpToken, IERC20Metadata {
+abstract contract LpToken is ILpToken, IERC20 {
     //tokenId -> total supply
     mapping(uint256 => uint256) public override totalSupply;
     //account -> tokenId -> balance
