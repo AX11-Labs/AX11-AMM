@@ -2,16 +2,17 @@
 
 pragma solidity 0.8.28;
 
-import {LpToken} from "./abstracts/LpToken.sol";
+import {Ax11Lp} from "./abstracts/Ax11Lp.sol";
 import {IPool} from "./interfaces/IPool.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
+import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 
-contract Pool is LpToken, IPool {
+contract Pool is Ax11Lp, IPool, ReentrancyGuard {
     address public immutable override factory;
-    IERC20 public immutable override token0;
-    IERC20 public immutable override token1;
-    uint8 public constant binStep = 10;
+    address public immutable override token0;
+    address public immutable override token1;
+    // uint8 public constant binStep = 10;
     int24 public constant MIN_PRICE_ID = -65536;
     int24 public constant MAX_PRICE_ID = 65535;
 
@@ -30,12 +31,12 @@ contract Pool is LpToken, IPool {
     mapping(int24 binId => BinInfo) public bins;
     // mapping(uint16 groupsId => GroupInfo) public override binGroups;
 
-    modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "EXPIRED");
+    modifier initCheck() virtual {
+        require(totalShare0 == 0 && totalShare1 == 0, "INITIALIZED");
         _;
     }
 
-    constructor(IERC20 _token0, IERC20 _token1, string memory name, string memory symbol) LpToken(name, symbol) {
+    constructor(address _token0, address _token1, string memory name, string memory symbol) Ax11Lp(name, symbol) {
         factory = msg.sender;
         token0 = _token0;
         token1 = _token1;
@@ -46,9 +47,8 @@ contract Pool is LpToken, IPool {
         initializer = _initializer;
     }
 
-    function initialize(int24 _activeBin) external nonReentrant {
+    function initialize(int24 _activeBin) external nonReentrant initCheck {
         address sender = msg.sender;
-        require(reserve0 == 0 && reserve1 == 0, "INITIALIZED");
         require(_activeBin >= -65024 && _activeBin <= 65023, "INVALID_INIT_PRICE");
 
         TransferHelper.safeTransferFrom(token0, sender, address(this), 512);
@@ -71,8 +71,7 @@ contract Pool is LpToken, IPool {
         totalShare0 = 512 * type(uint64).max;
         totalShare1 = 512 * type(uint64).max;
 
-        _mint(address(0), 0, 512 ** 2);
-        _mint(address(0), 1, 512 ** 2);
+        _mint(address(0), 512, 512, 512, 512);
 
         initializer = sender;
     }
@@ -81,20 +80,20 @@ contract Pool is LpToken, IPool {
         external
         ensure(deadline)
         nonReentrant
+        initCheck
         returns (uint256 amountA, uint256 amountB)
     {
         address sender = msg.sender;
-        require(reserve0 != 0 && reserve1 != 0, "UNINITIALIZED");
         require(amount0 != 0 && amount1 != 0, "ZERO_AMOUNT");
 
-        uint256 balBefore0 = token0.balanceOf(address(this));
-        uint256 balBefore1 = token1.balanceOf(address(this));
+        uint256 balBefore0 = IERC20(token0).balanceOf(address(this));
+        uint256 balBefore1 = IERC20(token1).balanceOf(address(this));
         TransferHelper.safeTransferFrom(token0, sender, address(this), amount0);
         TransferHelper.safeTransferFrom(token1, sender, address(this), amount1);
-        uint256 balAfter0 = token0.balanceOf(address(this));
-        uint256 balAfter1 = token1.balanceOf(address(this));
+        uint256 balAfter0 = IERC20(token0).balanceOf(address(this));
+        uint256 balAfter1 = IERC20(token1).balanceOf(address(this));
 
-        amountA = ((balAfter0 - balBefore0) * (totalSupply(0))) / balBefore0;
+        amountA = ((balAfter0 - balBefore0) * (totalSupply(0))) / balBefore0;           
         amountB = ((balAfter1 - balBefore1) * (totalSupply(1))) / balBefore1;
 
         _mint(recipient, 0, amountA);
@@ -105,10 +104,10 @@ contract Pool is LpToken, IPool {
         external
         ensure(deadline)
         nonReentrant
+        initCheck
         returns (uint256 amountA, uint256 amountB)
     {
         address sender = msg.sender;
-        require(reserve0 != 0 && reserve1 != 0, "UNINITIALIZED");
         require(amount0 != 0 && amount1 != 0, "ZERO_AMOUNT");
 
         uint256 bal0 = token0.balanceOf(address(this));
