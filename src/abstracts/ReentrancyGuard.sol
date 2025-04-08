@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.28;
 
 /// @notice Reentrancy guard mixin.
@@ -13,6 +13,9 @@ abstract contract ReentrancyGuard {
 
     /// @dev Unauthorized reentrant call.
     error Reentrancy();
+
+    /// @dev Expired deadline.
+    error Expired();
 
     /*«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-*/
     /*                          STORAGE                           */
@@ -53,6 +56,11 @@ abstract contract ReentrancyGuard {
                 revert(0x1c, 0x04)
             }
         }
+        _;
+    }
+
+    modifier ensure(uint256 deadline) virtual {
+        require(deadline >= block.timestamp, Expired());
         _;
     }
 }
