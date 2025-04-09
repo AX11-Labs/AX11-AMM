@@ -39,6 +39,8 @@ library SafeCast {
     error SafeCast__Exceeds16Bits();
     error SafeCast__Exceeds8Bits();
 
+    error SafeCastOverflowedIntDowncast24();
+
     /**
      * @dev Returns x on uint248 and check that it does not overflow
      * @param x The value as an uint256
@@ -316,5 +318,23 @@ library SafeCast {
      */
     function safe8(uint256 x) internal pure returns (uint8 y) {
         if ((y = uint8(x)) != x) revert SafeCast__Exceeds8Bits();
+    }
+
+    /**
+     * @dev Returns the downcasted int24 from int256, reverting on
+     * overflow (when the input is less than smallest int24 or
+     * greater than largest int24).
+     *
+     * Counterpart to Solidity's `int24` operator.
+     *
+     * Requirements:
+     *
+     * - input must fit into 24 bits
+     */
+    function toInt24(int256 value) internal pure returns (int24 downcasted) {
+        downcasted = int24(value);
+        if (downcasted != value) {
+            revert SafeCastOverflowedIntDowncast24();
+        }
     }
 }
