@@ -54,8 +54,9 @@ interface IFactory {
     /// @dev Tokens are automatically sorted so token0 is always the lower address
     /// @param token0 The address of the first token
     /// @param token1 The address of the second token
+    /// @param activeId The active bin of the pool
     /// @return pool The address of the newly created pool
-    function createPool(address token0, address token1) external returns (address pool);
+    function createPool(address token0, address token1, int24 activeId) external returns (address pool);
 
     /// @notice Updates the owner of the factory
     /// @dev Can only be called by the current owner

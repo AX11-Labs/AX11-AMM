@@ -18,7 +18,7 @@ contract Factory is IFactory {
         owner = msg.sender;
     }
 
-    function createPool(address token0, address token1) external override returns (address pool) {
+    function createPool(address token0, address token1, int24 activeId) external override returns (address pool) {
         if (token0 == token1) {
             revert INVALID_ADDRESS();
         } else if (token0 > token1) {
@@ -31,7 +31,7 @@ contract Factory is IFactory {
             string.concat("Ax11 Pool [", IERC20Metadata(token0).name(), "/", IERC20Metadata(token1).name(), "]");
         string memory _symbol =
             string.concat("Ax11-LP [", IERC20Metadata(token0).symbol(), "/", IERC20Metadata(token1).symbol(), "]");
-        pool = address(new Pool{salt: keccak256(abi.encodePacked(token0, token1))}(token0, token1, _name, _symbol));
+        pool = address(new Pool{salt: keccak256(abi.encodePacked(token0, token1))}(token0, token1, activeId, _name, _symbol));
 
         getPool[token0][token1] = pool;
         getPool[token1][token0] = pool; // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
