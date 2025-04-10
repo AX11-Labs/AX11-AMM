@@ -6,8 +6,8 @@ interface IPool {
     struct BinInfo {
         uint104 share0;
         uint104 share1;
-        int24 tilLower;
-        int24 tilUpper;
+        int24 nextLower;
+        int24 nextUpper;
     }
 
     // struct GroupInfo {

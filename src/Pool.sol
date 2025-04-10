@@ -12,7 +12,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
     address public immutable override factory;
     address public immutable override token0;
     address public immutable override token1;
-    // uint8 public constant binStep = 10;
     int24 public constant MIN_PRICE_ID = -65536;
     int24 public constant MAX_PRICE_ID = 65535;
 
@@ -26,10 +25,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
     int24 public tickUpper;
     int24 public tickLower;
 
-    address public initializer;
+    address public initiator;
 
     mapping(int24 binId => BinInfo) public bins;
-    // mapping(uint16 groupsId => GroupInfo) public override binGroups;
 
     modifier initCheck() virtual {
         require(totalShare0 == 0 && totalShare1 == 0, "INITIALIZED");
@@ -42,9 +40,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
         token1 = _token1;
     }
 
-    function setInitializer(address _initializer) external {
-        require(msg.sender == initializer, "NOT_INITIALIZER");
-        initializer = _initializer;
+    function setInitiator(address _initiator) external {
+        require(msg.sender == initiator, "NOT_INITIATOR");
+        initiator = _initiator;
     }
 
     function initialize(int24 _activeBin) external nonReentrant initCheck {
@@ -73,32 +71,44 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
 
         _mint(address(0), 512, 512, 512, 512);
 
-        initializer = sender;
+        initiator = sender;
     }
 
-    function mint(uint256 amount0, uint256 amount1, address recipient, uint256 deadline)
+    struct LiquidityOption{
+        uint64 longX;
+        uint64 longY;
+        uint64 shortX;
+        uint64 shortY;
+    }
+
+    function mint(uint256 amount0, uint256 amount1, address recipient, uint256 deadline, LiquidityOption calldata option)
         external
         ensure(deadline)
         nonReentrant
         initCheck
-        returns (uint256 amountA, uint256 amountB)
+        returns (uint256 amountA, uint256 amountB) 
     {
         address sender = msg.sender;
-        require(amount0 != 0 && amount1 != 0, "ZERO_AMOUNT");
+        //require(amount0 != 0 && amount1 != 0, "ZERO_AMOUNT");
 
         uint256 balBefore0 = IERC20(token0).balanceOf(address(this));
         uint256 balBefore1 = IERC20(token1).balanceOf(address(this));
-        TransferHelper.safeTransferFrom(token0, sender, address(this), amount0);
-        TransferHelper.safeTransferFrom(token1, sender, address(this), amount1);
+        if (amount0 !=0) {
+            TransferHelper.safeTransferFrom(token0, sender, address(this), amount0);
+        }
+        if (amount1 !=0) {
+            TransferHelper.safeTransferFrom(token1, sender, address(this), amount1);
+        }
         uint256 balAfter0 = IERC20(token0).balanceOf(address(this));
         uint256 balAfter1 = IERC20(token1).balanceOf(address(this));
+        
 
-        amountA = ((balAfter0 - balBefore0) * (totalSupply(0))) / balBefore0;           
-        amountB = ((balAfter1 - balBefore1) * (totalSupply(1))) / balBefore1;
+        // amountA = ((balAfter0 - balBefore0) * (totalSupply(0))) / balBefore0;           
+        // amountB = ((balAfter1 - balBefore1) * (totalSupply(1))) / balBefore1;
 
-        _mint(recipient, 0, amountA);
-        _mint(recipient, 1, amountB);
+        _mint(recipient, option.longX, option.longY, option.shortX, option.shortY);
     }
+
 
     function burn(uint256 amount0, uint256 amount1, address recipient, uint256 deadline)
         external
