@@ -3,6 +3,7 @@
 pragma solidity 0.8.28;
 
 interface IPool {
+    error INVALID_ADDRESS();
     struct PoolInfo {
         uint256 totalShare0;
         uint256 totalShare1;
@@ -35,13 +36,14 @@ interface IPool {
         uint256 shortY;
     }
 
+    function poolInfo() external view returns (PoolInfo memory);
+    function priceInfo() external view returns (PriceInfo memory);
+
     function factory() external view returns (address);
     function token0() external view returns (address);
     function token1() external view returns (address);
-    function fee() external view returns (uint8);
+    function initiator() external view returns (address);
 
-    function mint(address recipient, uint256 amount0, uint256 amount1, uint256 deadline)
-        external
-        payable
-        returns (uint256 amountA, uint256 amountB);
+    function setInitiator(address _initiator) external;
+    function mint(LiquidityOption calldata option) external payable returns (uint256 amountA, uint256 amountB);
 }

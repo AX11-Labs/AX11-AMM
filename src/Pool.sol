@@ -10,13 +10,13 @@ import {IERC20} from "./interfaces/IERC20.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard {
     mapping(uint256 binId => BinInfo) public bins;
-    PoolInfo public poolInfo;
-    PriceInfo public priceInfo;
+    PoolInfo public override poolInfo;
+    PriceInfo public override priceInfo;
 
     address public immutable override factory;
     address public immutable override token0;
     address public immutable override token1;
-    address public initiator;
+    address public override initiator;
 
     constructor(
         address _token0,
@@ -32,8 +32,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
         initialize(_activePrice, _initiator);
     }
 
-    function setInitiator(address _initiator) external {
-        require(msg.sender == initiator, "NOT_INITIATOR");
+    function setInitiator(address _initiator) external override{
+        require(msg.sender == initiator, INVALID_ADDRESS());
         initiator = _initiator;
     }
 
