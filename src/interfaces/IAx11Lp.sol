@@ -47,11 +47,8 @@ interface IAx11Lp is IERC20Metadata {
     );
 
     /// @notice Returns the total supply of LP tokens
-    /// @return longX The total amount of long position X tokens
-    /// @return longY The total amount of long position Y tokens
-    /// @return shortX The total amount of short position X tokens
-    /// @return shortY The total amount of short position Y tokens
-    function totalSupply() external view returns (uint256 longX, uint256 longY, uint256 shortX, uint256 shortY);
+    /// @return The total supply information containing long and short positions
+    function totalSupply() external view returns (LpInfo memory);
 
     /// @notice Returns the LP token balance of an account
     /// @param account The address to query the balance of
