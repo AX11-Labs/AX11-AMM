@@ -23,10 +23,10 @@ interface IAx11Lp is IERC20Metadata {
     /// @param shortX Amount of short position X tokens
     /// @param shortY Amount of short position Y tokens
     struct LpInfo {
-        uint64 longX;
-        uint64 longY;
-        uint64 shortX;
-        uint64 shortY;
+        uint256 longX;
+        uint256 longY;
+        uint256 shortX;
+        uint256 shortY;
     }
     /// @notice Event emitted when the approval amount for the spender of a given owner's tokens changes.
     /// @param owner The account that approved spending of its tokens
@@ -42,14 +42,16 @@ interface IAx11Lp is IERC20Metadata {
     /// @param longY The amount of long position Y tokens transferred
     /// @param shortX The amount of short position X tokens transferred
     /// @param shortY The amount of short position Y tokens transferred
-    event Transfer(address indexed from, address indexed to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY);
+    event Transfer(
+        address indexed from, address indexed to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY
+    );
 
     /// @notice Returns the total supply of LP tokens
     /// @return longX The total amount of long position X tokens
     /// @return longY The total amount of long position Y tokens
     /// @return shortX The total amount of short position X tokens
     /// @return shortY The total amount of short position Y tokens
-    function totalSupply() external view returns (uint64 longX, uint64 longY, uint64 shortX, uint64 shortY);
+    function totalSupply() external view returns (uint256 longX, uint256 longY, uint256 shortX, uint256 shortY);
 
     /// @notice Returns the LP token balance of an account
     /// @param account The address to query the balance of
@@ -60,7 +62,7 @@ interface IAx11Lp is IERC20Metadata {
     function balanceOf(address account)
         external
         view
-        returns (uint64 longX, uint64 longY, uint64 shortX, uint64 shortY);
+        returns (uint256 longX, uint256 longY, uint256 shortX, uint256 shortY);
 
     /// @notice Returns the current allowance status between owner and spender
     /// @param owner The address of the token owner
@@ -81,7 +83,9 @@ interface IAx11Lp is IERC20Metadata {
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transfer(address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY) external returns (bool);
+    function transfer(address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
+        external
+        returns (bool);
 
     /// @notice Transfers LP tokens from one address to another
     /// @param from The address to transfer tokens from
@@ -91,7 +95,7 @@ interface IAx11Lp is IERC20Metadata {
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transferFrom(address from, address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY)
+    function transferFrom(address from, address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
         external
         returns (bool);
 

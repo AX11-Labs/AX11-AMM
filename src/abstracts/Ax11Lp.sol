@@ -75,7 +75,7 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transfer(address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY) public returns (bool) {
+    function transfer(address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY) public returns (bool) {
         require(to != address(this), INVALID_ADDRESS());
 
         LpInfo storage lpInfo_from = balanceOf[msg.sender];
@@ -106,7 +106,7 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transferFrom(address from, address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY)
+    function transferFrom(address from, address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
         public
         returns (bool)
     {
@@ -217,7 +217,7 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param longY The amount of long position Y tokens to mint
     /// @param shortX The amount of short position X tokens to mint
     /// @param shortY The amount of short position Y tokens to mint
-    function _mint(address to, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY) internal {
+    function _mint(address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY) internal {
         LpInfo storage lpInfo_total = totalSupply;
         lpInfo_total.longX += longX;
         lpInfo_total.longY += longY;
@@ -243,7 +243,7 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param longY The amount of long position Y tokens to burn
     /// @param shortX The amount of short position X tokens to burn
     /// @param shortY The amount of short position Y tokens to burn
-    function _burn(address from, uint64 longX, uint64 longY, uint64 shortX, uint64 shortY) internal {
+    function _burn(address from, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY) internal {
         LpInfo storage lpInfo_bal = balanceOf[from];
         lpInfo_bal.longX -= longX;
         lpInfo_bal.longY -= longY;
