@@ -7,7 +7,6 @@ import {Uint256x256Math} from "./Math/Uint256x256Math.sol";
 import {SafeCast} from "./Math/SafeCast.sol";
 import {Constants} from "./Constants.sol";
 
-
 /**
  * @title Price Helper Library
  * @author Ax11
@@ -18,14 +17,14 @@ library PriceHelper {
     using Uint256x256Math for uint256;
 
     int256 private constant REAL_ID_SHIFT = 1 << 23;
-    uint256  private constant BINSTEP = 10; // 0.01%
+    uint256 private constant BINSTEP = 10; // 0.01%
 
     /**
      * @dev Calculates the price from the id and the bin step
      * @param id The id
      * @return price The price as a 128.128-binary fixed-point number
      */
-    function getPriceFromId(int id) internal pure returns (uint256 price) {
+    function getPriceFromId(int256 id) internal pure returns (uint256 price) {
         uint256 base = getBase();
         price = base.pow(id);
     }
@@ -35,7 +34,7 @@ library PriceHelper {
      * @param price The price as a 128.128-binary fixed-point number
      * @return id The id
      */
-    function getIdFromPrice(uint256 price) internal pure returns (int id) {
+    function getIdFromPrice(uint256 price) internal pure returns (int256 id) {
         uint256 base = getBase();
         int256 realId = price.log2() / base.log2();
         id = SafeCast.toInt24(realId);
