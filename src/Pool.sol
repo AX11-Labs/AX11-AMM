@@ -9,7 +9,7 @@ import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard {
-    mapping(uint256 binId => BinInfo) public bins;
+    mapping(uint256 => BinInfo) public bins;
     PoolInfo public override poolInfo;
     PriceInfo public override priceInfo;
 
@@ -32,7 +32,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
         initialize(_activePrice, _initiator);
     }
 
-    function setInitiator(address _initiator) external override{
+    function setInitiator(address _initiator) external override {
         require(msg.sender == initiator, INVALID_ADDRESS());
         initiator = _initiator;
     }
@@ -67,6 +67,59 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
         _mint(address(0), _share, _share, _share, _share);
 
         initiator = _initiator;
+    }
+
+    function getAmountFromShare(uint256 share, uint256 totalShare,uint256 balance) private pure returns (uint256) {
+        return (share * balance) / totalShare;
+    }
+
+    function swap(address recipient, bool xInYOut, uint256 amountIn)
+        external
+        nonReentrant
+        returns (uint256 amountOut)
+    {
+        (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
+
+        uint256 balInBefore = IERC20(tokenIn).balanceOf(address(this));
+        TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
+        uint256 balInAfter = IERC20(tokenIn).balanceOf(address(this));
+        uint256 balOut = IERC20(tokenOut).balanceOf(address(this));
+        uint256 remainingAmount = balInAfter - balInBefore; // actual amountIn
+
+        amountOut = 0;
+        uint256 binId = priceInfo.activePrice;
+
+        while (remainingAmount != 0) {
+            BinInfo storage bin = bins[binId];
+            uint256 binShare = xInYOut ? bin.binShare0 : bin.binShare1;
+
+            if (binShare == 0 || balOut == 0) {
+                if (remainingAmount != 0) {
+                    TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
+                }
+                break;
+            }
+            
+
+
+            
+            uint256 amountToSwap = remainingAmount > binShare ? binShare : remainingAmount;
+            uint256 amountOutWithFee = (amountToSwap * (10000 - priceInfo.fee)) / 10000;
+            amountOut += amountOutWithFee;
+            remainingAmount -= amountToSwap;
+
+            if (xInYOut) {
+                bin.binShare0 -= amountToSwap;
+                bin.binShare1 += amountOutWithFee;
+            } else {
+                bin.binShare1 -= amountToSwap;
+                bin.binShare0 += amountOutWithFee;
+            }
+            
+            binId = xInYOut ? bin.nextPriceUpper : bin.nextPriceLower;
+        }
+
+        TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
     }
 
     function mint(LiquidityOption calldata option)
