@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 
 interface IPool {
     error INVALID_ADDRESS();
+
     struct PoolInfo {
         uint256 totalShare0;
         uint256 totalShare1;
