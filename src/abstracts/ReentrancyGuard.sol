@@ -14,9 +14,6 @@ abstract contract ReentrancyGuard {
     /// @dev Unauthorized reentrant call.
     error Reentrancy();
 
-    /// @dev Expired deadline.
-    error Expired();
-
     /*«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-«-*/
     /*                          STORAGE                           */
     /*-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»-»*/
@@ -59,8 +56,4 @@ abstract contract ReentrancyGuard {
         _;
     }
 
-    modifier ensure(uint256 deadline) virtual {
-        require(deadline >= block.timestamp, Expired());
-        _;
-    }
 }
