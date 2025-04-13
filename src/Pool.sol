@@ -7,8 +7,9 @@ import {IPool} from "./interfaces/IPool.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
+import {Deadline} from "./abstracts/Deadline.sol";
 
-contract Pool is Ax11Lp, IPool, ReentrancyGuard {
+contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     mapping(uint256 => BinInfo) public bins;
     PoolInfo public override poolInfo;
     PriceInfo public override priceInfo;
@@ -69,8 +70,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
         initiator = _initiator;
     }
 
-    function getAmountFromShare(uint256 share, uint256 totalShare,uint256 balance) private pure returns (uint256) {
-        return (share * balance) / totalShare;
+    function getAmountFromShare(uint256 share, uint256 totalShare, uint256 totalAmount)
+        private
+        pure
+        returns (uint256)
+    {
+        return (share * totalAmount) / totalShare;
     }
 
     function swap(address recipient, bool xInYOut, uint256 amountIn)
@@ -88,22 +93,27 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
 
         amountOut = 0;
         uint256 binId = priceInfo.activePrice;
+        uint256 binShareRemoved;
+        uint256 swappable;
 
         while (remainingAmount != 0) {
-            BinInfo storage bin = bins[binId];
-            uint256 binShare = xInYOut ? bin.binShare0 : bin.binShare1;
+            BinInfo storage _bin = bins[binId];
+            PoolInfo storage _pool = poolInfo;
+            (uint256 binShareIn, uint256 binShareOut, uint256 totalShareIn, uint256 totalShareOut) = xInYOut
+                ? (_bin.binShare0, _bin.binShare1, _pool.totalShare0, _pool.totalShare1)
+                : (_bin.binShare1, _bin.binShare0, _pool.totalShare1, _pool.totalShare0);
+            swappable = getAmountFromShare(binShareOut, totalShareOut, balOut);
 
-            if (binShare == 0 || balOut == 0) {
+            if (swappable == 0) {
                 if (remainingAmount != 0) {
                     TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
                 }
                 break;
+            } else if (remainingAmount > swappable) {
+                //do something
+            } else {
+                amountToSwap = remainingAmount;
             }
-            
-
-
-            
-            uint256 amountToSwap = remainingAmount > binShare ? binShare : remainingAmount;
             uint256 amountOutWithFee = (amountToSwap * (10000 - priceInfo.fee)) / 10000;
             amountOut += amountOutWithFee;
             remainingAmount -= amountToSwap;
@@ -115,7 +125,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard {
                 bin.binShare1 -= amountToSwap;
                 bin.binShare0 += amountOutWithFee;
             }
-            
+
             binId = xInYOut ? bin.nextPriceUpper : bin.nextPriceLower;
         }
 
