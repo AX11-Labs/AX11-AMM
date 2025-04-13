@@ -31,9 +31,9 @@ interface IAx11Lp is IERC20Metadata {
     /// @notice Event emitted when the approval amount for the spender of a given owner's tokens changes.
     /// @param owner The account that approved spending of its tokens
     /// @param spender The account for which the spending allowance was modified
-    /// @param value true = allow, false = disallow/revoke
+    /// @param value block timestamp limit
 
-    event Approval(address indexed owner, address indexed spender, bool value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     /// @notice Event emitted when LP tokens are transferred between accounts
     /// @param from The account from which the LP tokens were sent
@@ -45,6 +45,18 @@ interface IAx11Lp is IERC20Metadata {
     event Transfer(
         address indexed from, address indexed to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY
     );
+
+    /// @notice Returns the name of the token
+    /// @return The name of the token
+    function name() external view returns (string memory);
+
+    /// @notice Returns the symbol of the token
+    /// @return The symbol of the token
+    function symbol() external view returns (string memory);
+
+    /// @notice Returns the number of decimals used by the token
+    /// @return The number of decimals
+    function decimals() external view returns (uint8);
 
     /// @notice Returns the total supply of LP tokens
     /// @return The total supply information containing long and short positions
@@ -64,14 +76,14 @@ interface IAx11Lp is IERC20Metadata {
     /// @notice Returns the current allowance status between owner and spender
     /// @param owner The address of the token owner
     /// @param spender The address of the token spender
-    /// @return The current allowance status (true = allowed, false = not allowed)
-    function allowance(address owner, address spender) external view returns (bool);
+    /// @return the block timestamp limit
+    function allowance(address owner, address spender) external view returns (uint256);
 
     /// @notice Approves or revokes permission for a spender to transfer tokens
     /// @param spender The address to approve or revoke permission for
-    /// @param value true to approve, false to revoke
+    /// @param value the block timestamp limit
     /// @return A boolean indicating whether the operation succeeded
-    function approve(address spender, bool value) external returns (bool);
+    function approve(address spender, uint256 value) external returns (bool);
 
     /// @notice Transfers LP tokens to another address
     /// @param to The address to transfer tokens to
@@ -99,13 +111,13 @@ interface IAx11Lp is IERC20Metadata {
     /// @notice Approves a spender to transfer tokens using a signature
     /// @param owner The address of the token owner
     /// @param spender The address to approve or revoke permission for
-    /// @param value true to approve, false to revoke
+    /// @param value the block timestamp limit
     /// @param deadline The time at which the signature expires
     /// @param v The recovery byte of the signature
     /// @param r Half of the ECDSA signature pair
     /// @param s Half of the ECDSA signature pair
     /// @return A boolean indicating whether the operation succeeded
-    function permit(address owner, address spender, bool value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
         external
         returns (bool);
 
