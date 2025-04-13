@@ -13,25 +13,25 @@ abstract contract Ax11Lp is IAx11Lp {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Total supply of LP tokens
-    LpInfo public override totalSupply;
+    LpInfo private _totalSupply;
 
     /// @notice Mapping of account addresses to their LP token balances
     mapping(address => LpInfo) public override balanceOf;
 
-    /// @notice Mapping of owner addresses to spender addresses to their allowance status
-    mapping(address => mapping(address => bool)) public override allowance;
+    /// @notice Mapping of owner addresses to spender addresses to their allowance block timestamp limit
+    mapping(address => mapping(address => uint256)) public override allowance;
 
     /// @notice Mapping of account addresses to their nonces for permit functionality
     mapping(address => uint256) public override nonces;
 
     /// @notice Name of the token
-    string public name;
+    string public override name;
 
     /// @notice Symbol of the token
-    string public symbol;
+    string public override symbol;
 
     /// @notice Number of decimals used by the token
-    uint8 public decimals = 18;
+    uint8 public constant override decimals = 18;
 
     /// @notice Initial chain ID for domain separator computation
     uint256 private immutable INITIAL_CHAIN_ID;
@@ -57,11 +57,17 @@ abstract contract Ax11Lp is IAx11Lp {
                               ERC20 LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Returns the total supply of LP tokens
+    /// @return The total supply information containing long and short positions
+    function totalSupply() public view override returns (LpInfo memory) {
+        return _totalSupply;
+    }
+
     /// @notice Approves or revokes permission for a spender to transfer tokens
     /// @param spender The address to approve or revoke permission for
-    /// @param value true to approve, false to revoke
+    /// @param value block timstamp limit
     /// @return A boolean indicating whether the operation succeeded
-    function approve(address spender, bool value) public returns (bool) {
+    function approve(address spender, uint256 value) public returns (bool) {
         address owner = msg.sender;
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
@@ -111,7 +117,7 @@ abstract contract Ax11Lp is IAx11Lp {
         returns (bool)
     {
         require(to != address(this), INVALID_ADDRESS());
-        require(allowance[from][msg.sender] == true, INSUFFICIENT_ALLOWANCE());
+        require(allowance[from][msg.sender] >= block.timestamp, INSUFFICIENT_ALLOWANCE());
 
         LpInfo storage lpInfo_from = balanceOf[from];
         lpInfo_from.longX -= longX;
@@ -140,13 +146,13 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @notice Approves a spender to transfer tokens using a signature
     /// @param owner The address of the token owner
     /// @param spender The address to approve or revoke permission for
-    /// @param value true to approve, false to revoke
+    /// @param value the block timestamp limit
     /// @param deadline The time at which the signature expires
     /// @param v The recovery byte of the signature
     /// @param r Half of the ECDSA signature pair
     /// @param s Half of the ECDSA signature pair
     /// @return A boolean indicating whether the operation succeeded
-    function permit(address owner, address spender, bool value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
         public
         override
         returns (bool)
@@ -163,7 +169,7 @@ abstract contract Ax11Lp is IAx11Lp {
                         keccak256(
                             abi.encode(
                                 keccak256(
-                                    "Permit(address owner,address spender,bool value,uint256 nonce,uint256 deadline)"
+                                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
                                 ),
                                 owner,
                                 spender,
@@ -179,7 +185,7 @@ abstract contract Ax11Lp is IAx11Lp {
                 s
             );
 
-            require(recoveredAddress != address(0) && recoveredAddress == owner, INVALID_ADDRESS());
+            require(recoveredAddress == owner, INVALID_ADDRESS());
             allowance[owner][spender] = value;
         }
 
@@ -218,7 +224,7 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param shortX The amount of short position X tokens to mint
     /// @param shortY The amount of short position Y tokens to mint
     function _mint(address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY) internal {
-        LpInfo storage lpInfo_total = totalSupply;
+        LpInfo storage lpInfo_total = _totalSupply;
         lpInfo_total.longX += longX;
         lpInfo_total.longY += longY;
         lpInfo_total.shortX += shortX;
@@ -250,7 +256,7 @@ abstract contract Ax11Lp is IAx11Lp {
         lpInfo_bal.shortX -= shortX;
         lpInfo_bal.shortY -= shortY;
 
-        LpInfo storage lpInfo_total = totalSupply;
+        LpInfo storage lpInfo_total = _totalSupply;
         // Cannot underflow because a user's balance
         // will never be larger than the total supply.
         unchecked {
