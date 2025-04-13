@@ -4,9 +4,14 @@ pragma solidity 0.8.28;
 
 import {IAx11Lp} from "../interfaces/IAx11Lp.sol";
 
-/// @title Ax11 LP Token Implementation
-/// @notice This contract implements the IAx11Lp interface, providing functionality for LP tokens with long and short positions
-/// @dev This is an abstract contract that should be inherited by the final implementation
+/**
+ * @title Ax11Lp
+ * @notice Implementation of the IAx11Lp interface for LP token management
+ * @dev This contract implements a TTL (Time-To-Live) based token approval system instead of the standard ERC20 amount-based allowance.
+ *      The allowance mapping stores block timestamps as values, where a timestamp greater than the current block.timestamp
+ *      indicates an active approval. This provides a time-limited approval mechanism where approvals automatically expire.
+ *      This differs from standard ERC20 where allowances are amount-based and must be explicitly revoked.
+ */
 abstract contract Ax11Lp is IAx11Lp {
     /*//////////////////////////////////////////////////////////////
                               ERC20 STORAGE
@@ -18,7 +23,9 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @notice Mapping of account addresses to their LP token balances
     mapping(address => LpInfo) public override balanceOf;
 
-    /// @notice Mapping of owner addresses to spender addresses to their allowance block timestamp limit
+    /// @notice Tracks the timestamp-based allowances for token transfers
+    /// @dev Uses block.timestamp as the approval metric. A timestamp greater than current block.timestamp indicates an active approval.
+    ///      This implements a TTL (Time-To-Live) based approval system where approvals automatically expire.
     mapping(address => mapping(address => uint256)) public override allowance;
 
     /// @notice Mapping of account addresses to their nonces for permit functionality
@@ -185,7 +192,7 @@ abstract contract Ax11Lp is IAx11Lp {
                 s
             );
 
-            require(recoveredAddress == owner, INVALID_ADDRESS());
+            require(recoveredAddress != address(0) && recoveredAddress == owner, INVALID_ADDRESS());
             allowance[owner][spender] = value;
         }
 
