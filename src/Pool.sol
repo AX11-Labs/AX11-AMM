@@ -8,6 +8,7 @@ import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 import {Deadline} from "./abstracts/Deadline.sol";
+import {PriceMath} from "./libraries/PriceMath.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     mapping(uint256 => BinInfo) public bins;
@@ -38,6 +39,14 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         initiator = _initiator;
     }
 
+
+function getBase() private pure returns (uint256) {
+    unchecked {
+        return (1001 << 128) / 1000;
+    }
+}
+
+    /// @notice _activePrice must be in 128.128 fixed point
     function initialize(uint256 _activePrice, address _initiator) private {
         TransferHelper.safeTransferFrom(token0, _initiator, address(this), 512);
         TransferHelper.safeTransferFrom(token1, _initiator, address(this), 512);
@@ -45,26 +54,31 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         PoolInfo storage _poolInfo = poolInfo;
         PriceInfo storage _priceInfo = priceInfo;
         uint256 _share = 512 << 128; // scaling as 128.128 fixed point
+        uint256 scale = type(uint128).max+1;
+
+        // Calculate price range using 512 bins with 0.1% (1.001) price changes
+        uint256 base = getBase().pow(512); // 1.001 in 128.128 fixed point
+        uint256 lowerPrice = PriceMath.fullMulDiv(_activePrice, scale, base);
+        uint256 upperPrice = PriceMath.fullMulDiv(_activePrice, base, scale);
 
         bins[_activePrice] = BinInfo({
             binShare0: _share,
             binShare1: _share,
-            nextPriceLower: _activePrice - 512,
-            nextPriceUpper: _activePrice + 512
+            nextPriceLower: lowerPrice,
+            nextPriceUpper: upperPrice
         });
 
         priceInfo = PriceInfo({
             activePrice: _activePrice,
-            minPrice: _activePrice - 512,
-            maxPrice: _activePrice + 512,
-            tickUpper: _activePrice - 256,
-            tickLower: _activePrice + 256,
-            fee: 50
+            minPrice: lowerPrice,
+            maxPrice: upperPrice,
+            tickUpper: (_activePrice + upperPrice) >> 1,
+            tickLower: (_activePrice + lowerPrice) >> 1,
+            fee: 30
         });
 
         poolInfo = PoolInfo({totalShare0: _share, totalShare1: _share});
-        _share /= 2;
-
+        _share >>= 1;
         _mint(address(0), _share, _share, _share, _share);
 
         initiator = _initiator;
@@ -102,7 +116,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             (uint256 binShareIn, uint256 binShareOut, uint256 totalShareIn, uint256 totalShareOut) = xInYOut
                 ? (_bin.binShare0, _bin.binShare1, _pool.totalShare0, _pool.totalShare1)
                 : (_bin.binShare1, _bin.binShare0, _pool.totalShare1, _pool.totalShare0);
-            swappable = getAmountFromShare(binShareOut, totalShareOut, balOut);
+            swappable = getAmountFromShare(binShareOut, totalShareOut, balOut, binId);
 
             if (swappable == 0) {
                 if (remainingAmount != 0) {
