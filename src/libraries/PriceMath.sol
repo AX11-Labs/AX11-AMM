@@ -2,9 +2,6 @@
 pragma solidity 0.8.28;
 
 library PriceMath {
-    int24 internal constant MIN_PRICE_ID = -65536;
-    int24 internal constant MAX_PRICE_ID = 65535;
-
 
     /// @dev Calculates `floor(x * y / d)` with full precision.
     /// Throws if result overflows a uint256 or when `d` is zero.
