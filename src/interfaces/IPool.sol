@@ -4,26 +4,29 @@ pragma solidity 0.8.28;
 
 interface IPool {
     error INVALID_ADDRESS();
+    error INVALID_PRICE();
 
     struct PoolInfo {
-        uint256 totalShare0;
-        uint256 totalShare1;
+        uint256 totalTokenShare0;
+        uint256 totalTokenShare1;
+        uint256 totalLPShareX;
+        uint256 totalLPShareY;
     }
 
     struct PriceInfo {
-        uint256 activePrice;
-        uint256 minPrice;
-        uint256 maxPrice;
-        uint256 tickUpper;
-        uint256 tickLower;
+        int24 activeId;
+        int24 minId;
+        int24 maxId;
+        int24 tickUpper;
+        int24 tickLower;
         uint8 fee;
     }
 
     struct BinInfo {
         uint256 binShare0;
         uint256 binShare1;
-        uint256 nextPriceLower;
-        uint256 nextPriceUpper;
+        int24 tilBinLower;
+        int24 tilBinUpper;
     }
 
     struct LiquidityOption {
