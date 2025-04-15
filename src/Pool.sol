@@ -11,7 +11,7 @@ import {Deadline} from "./abstracts/Deadline.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
-    mapping(uint256 => BinInfo) public bins;
+    mapping(int24 => BinInfo) public bins;
     PoolInfo public override poolInfo;
     PriceInfo public override priceInfo;
 
@@ -20,10 +20,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     address public immutable override token1;
     address public override initiator;
 
+    int256 public constant MAX_BIN_ID = 887272;
+    int256 public constant MIN_BIN_ID = -887272;
+
     constructor(
         address _token0,
         address _token1,
-        uint256 _activePrice,
+        int24 _activeId,
         address _initiator,
         string memory name,
         string memory symbol
@@ -31,7 +34,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         factory = msg.sender;
         token0 = _token0;
         token1 = _token1;
-        initialize(_activePrice, _initiator);
+        initialize(_activeId, _initiator);
     }
 
     function setInitiator(address _initiator) external override {
@@ -39,46 +42,40 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         initiator = _initiator;
     }
 
-
-function getBase() private pure returns (uint256) {
-    unchecked {
-        return (1001 << 128) / 1000;
+    function getBase() private pure returns (uint256) {
+        unchecked {
+            return (1001 << 128) / 1000; // 1.001 in 128.128 fixed point
+        }
     }
-}
 
-    /// @notice _activePrice must be in 128.128 fixed point
-    function initialize(uint256 _activePrice, address _initiator) private {
-        TransferHelper.safeTransferFrom(token0, _initiator, address(this), 512);
-        TransferHelper.safeTransferFrom(token1, _initiator, address(this), 512);
+    function initialize(int24 _activeId, address _initiator) private {
+        TransferHelper.safeTransferFrom(token0, _initiator, address(this), 1024);
+        TransferHelper.safeTransferFrom(token1, _initiator, address(this), 1024);
 
         PoolInfo storage _poolInfo = poolInfo;
         PriceInfo storage _priceInfo = priceInfo;
-        uint256 _share = 512 << 128; // scaling as 128.128 fixed point
-        uint256 scale = type(uint128).max+1;
 
-        // Calculate price range using 512 bins with 0.1% (1.001) price changes
-        uint256 base = getBase().pow(512); // 1.001 in 128.128 fixed point
-        uint256 lowerPrice = PriceMath.fullMulDiv(_activePrice, scale, base);
-        uint256 upperPrice = PriceMath.fullMulDiv(_activePrice, base, scale);
+        uint256 _share = 1024 << 128; // scaling as 128.128 fixed point
 
-        bins[_activePrice] = BinInfo({
-            binShare0: _share,
-            binShare1: _share,
-            nextPriceLower: lowerPrice,
-            nextPriceUpper: upperPrice
-        });
+        int24 lowerBin = _activeId - 512;
+        int24 upperBin = _activeId + 512;
+        require(lowerBin >= MIN_BIN_ID && upperBin <= MAX_BIN_ID, INVALID_PRICE());
+
+        bins[_activeId] = BinInfo({binShare0: _share, binShare1: _share, tilBinLower: lowerBin, tilBinUpper: upperBin});
 
         priceInfo = PriceInfo({
-            activePrice: _activePrice,
-            minPrice: lowerPrice,
-            maxPrice: upperPrice,
-            tickUpper: (_activePrice + upperPrice) >> 1,
-            tickLower: (_activePrice + lowerPrice) >> 1,
+            activePrice: _activeId,
+            minPrice: lowerBin,
+            maxPrice: upperBin,
+            tickUpper: (_activeId + upperBin) >> 1, // shifting before adding to avoid overflow
+            tickLower: (_activeId + lowerBin) >> 1, // shifting before adding to avoid overflow
             fee: 30
         });
 
-        poolInfo = PoolInfo({totalShare0: _share, totalShare1: _share});
+        poolInfo =
+            PoolInfo({totalTokenShare0: _share, totalTokenShare1: _share, totalLPShareX: _share, totalLPShareY: _share});
         _share >>= 1;
+
         _mint(address(0), _share, _share, _share, _share);
 
         initiator = _initiator;
