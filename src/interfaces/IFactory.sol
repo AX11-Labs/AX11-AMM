@@ -5,6 +5,9 @@ pragma solidity 0.8.28;
 /// @title Factory Interface for Ax11 AMM
 /// @notice Interface for the factory contract that deploys and manages Ax11 liquidity pools
 interface IFactory {
+    /// @notice Error thrown when the caller is not the owner
+    error NOT_OWNER();
+
     /// @notice Error thrown when an invalid address is provided (zero address or identical tokens)
     error INVALID_ADDRESS();
 
