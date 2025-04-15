@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 library PriceMath {
-
     /// @dev Calculates `floor(x * y / d)` with full precision.
     /// Throws if result overflows a uint256 or when `d` is zero.
     /// Credit to Remco Bloemen under MIT license: https://2π.com/21/muldiv
@@ -62,6 +61,29 @@ library PriceMath {
                 z := div(z, d)
                 break
             }
+        }
+    }
+
+    /// @dev Calculates `floor(x * y / d)` with full precision.
+    /// Behavior is undefined if `d` is zero or the final result cannot fit in 256 bits.
+    /// Performs the full 512 bit calculation regardless.
+    function fullMulDivUnchecked(uint256 x, uint256 y, uint256 d) internal pure returns (uint256 z) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            z := mul(x, y)
+            let mm := mulmod(x, y, not(0))
+            let p1 := sub(mm, add(z, lt(mm, z)))
+            let t := and(d, sub(0, d))
+            let r := mulmod(x, y, d)
+            d := div(d, t)
+            let inv := xor(2, mul(3, d))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            z :=
+                mul(or(mul(sub(p1, gt(r, z)), add(div(sub(0, t), t), 1)), div(sub(z, r), t)), mul(sub(2, mul(d, inv)), inv))
         }
     }
 }
