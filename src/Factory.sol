@@ -16,10 +16,10 @@ contract Factory is IFactory {
 
     constructor() {
         owner = msg.sender;
+        feeTo = msg.sender;
     }
 
-    /// @notice `activePrice` is the price of the pool at the time of creation in 128.128 Fixedpoint format
-    function createPool(address token0, address token1, uint256 activePrice) external override returns (address pool) {
+    function createPool(address token0, address token1, int24 activeId) external override returns (address pool) {
         if (token0 == token1) {
             revert INVALID_ADDRESS();
         } else if (token0 > token1) {
@@ -34,7 +34,7 @@ contract Factory is IFactory {
             string.concat("Ax11-LP [", IERC20Metadata(token0).symbol(), "/", IERC20Metadata(token1).symbol(), "]");
         pool = address(
             new Pool{salt: keccak256(abi.encodePacked(token0, token1))}(
-                token0, token1, activePrice, msg.sender, _name, _symbol
+                token0, token1, activeId, msg.sender, _name, _symbol
             )
         );
 
@@ -48,12 +48,12 @@ contract Factory is IFactory {
     }
 
     function setOwner(address _owner) external override {
-        require(msg.sender == owner);
+        require(msg.sender == owner, NOT_OWNER());
         owner = _owner;
     }
 
     function setFeeTo(address _feeTo) external override {
-        require(msg.sender == owner);
+        require(msg.sender == owner, NOT_OWNER());
         feeTo = _feeTo;
     }
 }
