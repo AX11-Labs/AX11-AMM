@@ -9,19 +9,21 @@ import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 import {Deadline} from "./abstracts/Deadline.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
+import {Uint256x256Math} from "./libraries/Math/Uint256x256Math.sol";
+import {FeeTier} from "./libraries/FeeTier.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     mapping(int24 => BinInfo) public bins;
     PoolInfo public override poolInfo;
     PriceInfo public override priceInfo;
 
+    int24 public constant MAX_BIN_ID = 88767;
+    int24 public constant MIN_BIN_ID = -88767;
+
     address public immutable override factory;
     address public immutable override token0;
     address public immutable override token1;
     address public override initiator;
-
-    int256 public constant MAX_BIN_ID = 887272;
-    int256 public constant MIN_BIN_ID = -887272;
 
     constructor(
         address _token0,
@@ -57,8 +59,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         uint256 _share = 1024 << 128; // scaling as 128.128 fixed point
 
-        int24 lowerBin = _activeId - 512;
-        int24 upperBin = _activeId + 512;
+        int24 lowerBin = _activeId - 511;
+        int24 upperBin = _activeId + 511;
         require(lowerBin >= MIN_BIN_ID && upperBin <= MAX_BIN_ID, INVALID_PRICE());
 
         bins[_activeId] = BinInfo({binShare0: _share, binShare1: _share, tilBinLower: lowerBin, tilBinUpper: upperBin});
@@ -67,8 +69,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             activePrice: _activeId,
             minPrice: lowerBin,
             maxPrice: upperBin,
-            tickUpper: (_activeId + upperBin) >> 1, // shifting before adding to avoid overflow
-            tickLower: (_activeId + lowerBin) >> 1, // shifting before adding to avoid overflow
+            tickUpper: (_activeId + upperBin) >> 1, // round down
+            tickLower: (_activeId + lowerBin) >> 1, // round down
             fee: 30
         });
 
@@ -81,12 +83,31 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         initiator = _initiator;
     }
 
-    function getAmountFromShare(uint256 share, uint256 totalShare, uint256 totalAmount)
-        private
-        pure
-        returns (uint256)
-    {
-        return (share * totalAmount) / totalShare;
+    // function getSwapAmount(bool xInYOut, uint256 amountIn) public view returns (uint256) {
+    //     int24 binId = priceInfo.activeId;
+    //     BinInfo storage _bin = bins[binId];
+    //         PoolInfo storage _pool = poolInfo;
+    //         (uint256 binShareIn, uint256 binShareOut, uint256 totalShareIn, uint256 totalShareOut) = xInYOut
+    //             ? (_bin.binShare0, _bin.binShare1, _pool.totalShare0, _pool.totalShare1)
+    //             : (_bin.binShare1, _bin.binShare0, _pool.totalShare1, _pool.totalShare0);
+    //     uint256 amountOut = _getSwapAmount(xInYOut, priceInfo.activeId, amountIn, );
+    //     return amountOut + FeeTier.getFee(priceInfo.maxId - priceInfo.minId, amountOut);
+    // }
+
+    /// @notice EXCLUDING FEE
+    /// @notice This is only for calculating the amountOut within a single bin.
+    function _getAmountFromBin(
+        bool xInYOut,
+        int24 binId,
+        uint256 binShareOut,
+        uint256 totalShareOut,
+        uint256 totalAmountOut
+    ) private view returns (uint256 amountOut, uint256 maxAmountIn) {
+        amountOut = PriceMath.fullMulDivUnchecked(totalAmountOut, binShareOut, totalShareOut); // won't overlow as shareOut <= totalShareOut
+
+        maxAmountIn = xInYOut
+            ? Uint256x256Math.shiftDivRoundUp(amountOut, 128, getBase().pow(binId)) // getBase().pow(binId) = price128.128
+            : Uint256x256Math.mulShiftRoundUp(amountOut, getBase().pow(binId), 128); // getBase().pow(binId) = price128.128
     }
 
     function swap(address recipient, bool xInYOut, uint256 amountIn)
@@ -96,16 +117,14 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     {
         (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
 
-        uint256 balInBefore = IERC20(tokenIn).balanceOf(address(this));
+        uint256 balIn = IERC20(tokenIn).balanceOf(address(this));
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        uint256 balInAfter = IERC20(tokenIn).balanceOf(address(this));
-        uint256 balOut = IERC20(tokenOut).balanceOf(address(this));
-        uint256 remainingAmount = balInAfter - balInBefore; // actual amountIn
+        uint256 totalBalIn = IERC20(tokenIn).balanceOf(address(this));
+        uint256 remainingAmount = totalBalIn - balIn; // get actual amountIn
 
-        amountOut = 0;
         uint256 binId = priceInfo.activePrice;
         uint256 binShareRemoved;
-        uint256 swappable;
+        uint256 available;
 
         while (remainingAmount != 0) {
             BinInfo storage _bin = bins[binId];
@@ -113,31 +132,48 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             (uint256 binShareIn, uint256 binShareOut, uint256 totalShareIn, uint256 totalShareOut) = xInYOut
                 ? (_bin.binShare0, _bin.binShare1, _pool.totalShare0, _pool.totalShare1)
                 : (_bin.binShare1, _bin.binShare0, _pool.totalShare1, _pool.totalShare0);
-            swappable = getAmountFromShare(binShareOut, totalShareOut, balOut, binId);
 
-            if (swappable == 0) {
-                if (remainingAmount != 0) {
-                    TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
-                }
+            (available, balIn) = _getAmountFromBin(xInYOut, binId, binShareOut, totalShareOut, available);
+            if (available == 0) {
+                // don't need to check if balIn == 0
+                TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
                 break;
-            } else if (remainingAmount > swappable) {
-                //do something
+            } else if (remainingAmount >= balIn) {
+                remainingAmount -= balIn;
+                amountOut += available;
+                binShareOut = 0;
+                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(balIn, totalShareIn, totalBalIn);
+                binShareIn += additionalShareIn;
+                totalShareIn += additionalShareIn;
+                totalBalIn += balIn;
             } else {
-                amountToSwap = remainingAmount;
-            }
-            uint256 amountOutWithFee = (amountToSwap * (10000 - priceInfo.fee)) / 10000;
-            amountOut += amountOutWithFee;
-            remainingAmount -= amountToSwap;
-
-            if (xInYOut) {
-                bin.binShare0 -= amountToSwap;
-                bin.binShare1 += amountOutWithFee;
-            } else {
-                bin.binShare1 -= amountToSwap;
-                bin.binShare0 += amountOutWithFee;
+                amountOut += remainingAmount;
+                remainingAmount = 0;
             }
 
-            binId = xInYOut ? bin.nextPriceUpper : bin.nextPriceLower;
+            // if (swappable == 0) {
+            //     if (remainingAmount != 0) {
+            //         TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
+            //     }
+            //     break;
+            // } else if (remainingAmount > swappable) {
+            //     //do something
+            // } else {
+            //     amountToSwap = remainingAmount;
+            // }
+            // uint256 amountOutWithFee = (amountToSwap * (10000 - priceInfo.fee)) / 10000;
+            // amountOut += amountOutWithFee;
+            // remainingAmount -= amountToSwap;
+
+            // if (xInYOut) {
+            //     bin.binShare0 -= amountToSwap;
+            //     bin.binShare1 += amountOutWithFee;
+            // } else {
+            //     bin.binShare1 -= amountToSwap;
+            //     bin.binShare0 += amountOutWithFee;
+            // }
+
+            // binId = xInYOut ? bin.nextPriceUpper : bin.nextPriceLower;
         }
 
         TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
