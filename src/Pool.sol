@@ -122,59 +122,58 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         uint256 totalBalIn = IERC20(tokenIn).balanceOf(address(this));
         uint256 remainingAmount = totalBalIn - balIn; // get actual amountIn
 
-        uint256 binId = priceInfo.activePrice;
-        uint256 binShareRemoved;
+        int24 binId = priceInfo.activePrice;
         uint256 available;
+
+        PoolInfo storage _pool = poolInfo;
+        (uint256 totalShareIn, uint256 totalShareOut) = xInYOut
+            ? (_pool.totalTokenShare0, _pool.totalTokenShare1)
+            : (_pool.totalTokenShare1, _pool.totalTokenShare0);
+
+        uint256 binShareIn;
+        uint256 binShareOut;
 
         while (remainingAmount != 0) {
             BinInfo storage _bin = bins[binId];
-            PoolInfo storage _pool = poolInfo;
-            (uint256 binShareIn, uint256 binShareOut, uint256 totalShareIn, uint256 totalShareOut) = xInYOut
-                ? (_bin.binShare0, _bin.binShare1, _pool.totalShare0, _pool.totalShare1)
-                : (_bin.binShare1, _bin.binShare0, _pool.totalShare1, _pool.totalShare0);
-
+            (binShareIn, binShareOut) = xInYOut ? (_bin.binShare0, _bin.binShare1) : (_bin.binShare1, _bin.binShare0);
             (available, balIn) = _getAmountFromBin(xInYOut, binId, binShareOut, totalShareOut, available);
+            bool breakable;
             if (available == 0) {
                 // don't need to check if balIn == 0
-                TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
+                if (remainingAmount != 0) {
+                    TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
+                }
                 break;
             } else if (remainingAmount >= balIn) {
                 remainingAmount -= balIn;
                 amountOut += available;
+                totalShareOut -= binShareOut;
                 binShareOut = 0;
-                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(balIn, totalShareIn, totalBalIn);
+                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(balIn, totalShareIn, totalBalIn); // won't overlow as balIn <= totalBalIn
                 binShareIn += additionalShareIn;
                 totalShareIn += additionalShareIn;
-                totalBalIn += balIn;
             } else {
-                amountOut += remainingAmount;
+                amountOut += PriceMath.fullMulDivUnchecked(remainingAmount, available, balIn); // won't overlow as remainingAmount <= balIn
+                uint256 removedShareOut = PriceMath.fullMulDivUnchecked(remainingAmount, binShareOut, balIn); // won't overlow as remainingAmount <= balIn
+                binShareOut -= removedShareOut;
+                totalShareOut -= removedShareOut;
                 remainingAmount = 0;
+                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(remainingAmount, totalShareIn, totalBalIn); // won't overlow as remainingAmount <= balIn
+                binShareIn += additionalShareIn;
+                totalShareIn += additionalShareIn;
+                breakable = true;
             }
 
-            // if (swappable == 0) {
-            //     if (remainingAmount != 0) {
-            //         TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
-            //     }
-            //     break;
-            // } else if (remainingAmount > swappable) {
-            //     //do something
-            // } else {
-            //     amountToSwap = remainingAmount;
-            // }
-            // uint256 amountOutWithFee = (amountToSwap * (10000 - priceInfo.fee)) / 10000;
-            // amountOut += amountOutWithFee;
-            // remainingAmount -= amountToSwap;
-
-            // if (xInYOut) {
-            //     bin.binShare0 -= amountToSwap;
-            //     bin.binShare1 += amountOutWithFee;
-            // } else {
-            //     bin.binShare1 -= amountToSwap;
-            //     bin.binShare0 += amountOutWithFee;
-            // }
-
-            // binId = xInYOut ? bin.nextPriceUpper : bin.nextPriceLower;
+            _bin.Share0 = xInYOut ? binShareIn : binShareOut;
+            _bin.Share1 = xInYOut ? binShareOut : binShareIn;
+            binId++;
+            binId = xInYOut ? binId - 1 : binId + 1;
+            if (breakable) break;
         }
+
+        _pool.totalTokenShare0 = xInYOut ? totalShareIn : totalShareOut;
+        _pool.totalTokenShare1 = xInYOut ? totalShareOut : totalShareIn;
+        priceInfo.activeId = binId;
 
         TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
     }
