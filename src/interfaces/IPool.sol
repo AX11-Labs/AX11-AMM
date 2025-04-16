@@ -5,6 +5,7 @@ pragma solidity 0.8.28;
 interface IPool {
     error INVALID_ADDRESS();
     error INVALID_PRICE();
+    error INSUFFICIENT_LIQUIDITY();
 
     struct PoolInfo {
         uint256 totalTokenShare0;
