@@ -66,7 +66,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         bins[_activeId] = BinInfo({binShare0: _share, binShare1: _share, tilBinLower: lowerBin, tilBinUpper: upperBin});
 
         priceInfo = PriceInfo({
-            activePrice: _activeId,
+            activeId: _activeId,
             minPrice: lowerBin,
             maxPrice: upperBin,
             tickUpper: (_activeId + upperBin) >> 1, // round down
@@ -102,8 +102,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         uint256 binShareOut,
         uint256 totalShareOut,
         uint256 totalAmountOut
-    ) private view returns (uint256 amountOut, uint256 maxAmountIn) {
-        amountOut = PriceMath.fullMulDivUnchecked(totalAmountOut, binShareOut, totalShareOut); // won't overlow as shareOut <= totalShareOut
+    ) private pure returns (uint256 amountOut, uint256 maxAmountIn) {
+        amountOut = PriceMath.fullMulDiv(totalAmountOut, binShareOut, totalShareOut); // won't overlow as shareOut <= totalShareOut
+        /// @dev since `initialize` totalShareOut will never be 0, at this in my lifetime, as well as binShareOut.
 
         maxAmountIn = xInYOut
             ? Uint256x256Math.shiftDivRoundUp(amountOut, 128, getBase().pow(binId)) // getBase().pow(binId) = price128.128
@@ -115,15 +116,15 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         nonReentrant
         returns (uint256 amountOut)
     {
+        require(amountIn != 0, "ZERO_AMOUNT");
         (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
 
-        uint256 balIn = IERC20(tokenIn).balanceOf(address(this));
+        uint256 balInBefore = IERC20(tokenIn).balanceOf(address(this));
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        uint256 totalBalIn = IERC20(tokenIn).balanceOf(address(this));
-        uint256 remainingAmount = totalBalIn - balIn; // get actual amountIn
-
-        int24 binId = priceInfo.activePrice;
-        uint256 available;
+        uint256 totalBalOut = IERC20(tokenOut).balanceOf(address(this));
+        amountIn = IERC20(tokenIn).balanceOf(address(this)) - balInBefore; // get actual amountIn
+        PriceInfo storage _price = priceInfo;
+        int24 binId = _price.activeId;
 
         PoolInfo storage _pool = poolInfo;
         (uint256 totalShareIn, uint256 totalShareOut) = xInYOut
@@ -132,50 +133,66 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         uint256 binShareIn;
         uint256 binShareOut;
+        uint256 available;
+        uint256 feeAmount;
+        uint256 additionalShareIn;
+        uint256 maxAmountIn;
 
-        while (remainingAmount != 0) {
+        while (amountIn != 0) {
+            require(binId >= MIN_BIN_ID && binId <= MAX_BIN_ID, "INVALID_BIN_ID");
             BinInfo storage _bin = bins[binId];
             (binShareIn, binShareOut) = xInYOut ? (_bin.binShare0, _bin.binShare1) : (_bin.binShare1, _bin.binShare0);
-            (available, balIn) = _getAmountFromBin(xInYOut, binId, binShareOut, totalShareOut, available);
-            bool breakable;
+            (available, maxAmountIn) = _getAmountFromBin(xInYOut, binId, binShareOut, totalShareOut, totalBalOut);
+
             if (available == 0) {
-                // don't need to check if balIn == 0
-                if (remainingAmount != 0) {
-                    TransferHelper.safeTransfer(tokenIn, recipient, remainingAmount); // refund
+                if (amountOut != 0) {
+                    TransferHelper.safeTransfer(tokenIn, recipient, amountIn); // refund
+                    maxAmountIn = 0;
+                    amountIn = 0;
                 }
-                break;
-            } else if (remainingAmount >= balIn) {
-                remainingAmount -= balIn;
+            } else if (amountIn >= maxAmountIn) {
+                amountIn -= maxAmountIn;
                 amountOut += available;
                 totalShareOut -= binShareOut;
                 binShareOut = 0;
-                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(balIn, totalShareIn, totalBalIn); // won't overlow as balIn <= totalBalIn
-                binShareIn += additionalShareIn;
-                totalShareIn += additionalShareIn;
             } else {
-                amountOut += PriceMath.fullMulDivUnchecked(remainingAmount, available, balIn); // won't overlow as remainingAmount <= balIn
-                uint256 removedShareOut = PriceMath.fullMulDivUnchecked(remainingAmount, binShareOut, balIn); // won't overlow as remainingAmount <= balIn
+                uint256 useAmountOut = PriceMath.fullMulDiv(amountIn, available, maxAmountIn); // won't overlow as remainingAmount < balIn
+                amountOut += useAmountOut;
+                uint256 removedShareOut = PriceMath.fullMulDiv(binShareOut, useAmountOut, available); // won't overlow as useAmountOut < available
                 binShareOut -= removedShareOut;
                 totalShareOut -= removedShareOut;
-                remainingAmount = 0;
-                uint256 additionalShareIn = PriceMath.fullMulDivUnchecked(remainingAmount, totalShareIn, totalBalIn); // won't overlow as remainingAmount <= balIn
-                binShareIn += additionalShareIn;
-                totalShareIn += additionalShareIn;
-                breakable = true;
+                maxAmountIn = amountIn;
+                amountIn = 0;
             }
 
-            _bin.Share0 = xInYOut ? binShareIn : binShareOut;
-            _bin.Share1 = xInYOut ? binShareOut : binShareIn;
-            binId++;
-            binId = xInYOut ? binId - 1 : binId + 1;
-            if (breakable) break;
+            // Unified share calculation and update
+            additionalShareIn = PriceMath.fullMulDiv(maxAmountIn, totalShareIn, balInBefore);
+            binShareIn += additionalShareIn;
+            totalShareIn += additionalShareIn;
+
+            _bin.binShare0 = xInYOut ? binShareIn : binShareOut;
+            _bin.binShare1 = xInYOut ? binShareOut : binShareIn;
+
+            if (amountIn == 0) break;
+            /// @dev in case of a perfect drain, we don't increase binShareOut and it's fine
+            /// because we already scaled the share by 128 bits, so no oveflow is expected in this lifetime.
+            // feeShare does not need to be updated, and so the feeAmount will be portionally shared by all bins available
+
+            binId = xInYOut ? binId - 1 : binId + 1; // need to ensure not exceeding min/max bin
         }
 
         _pool.totalTokenShare0 = xInYOut ? totalShareIn : totalShareOut;
         _pool.totalTokenShare1 = xInYOut ? totalShareOut : totalShareIn;
-        priceInfo.activeId = binId;
+        _price.activeId = binId;
 
-        TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
+        if (amountOut != 0) {
+            amountOut -= FeeTier.getFee(_price.maxId - _price.minId, amountOut);
+            TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
+        } else {
+            revert INSUFFICIENT_LIQUIDITY();
+        }
+
+        return amountOut;
     }
 
     function mint(LiquidityOption calldata option)
