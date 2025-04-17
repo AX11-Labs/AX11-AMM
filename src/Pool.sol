@@ -17,13 +17,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     PoolInfo public override poolInfo;
     PriceInfo public override priceInfo;
 
-    int24 public constant MAX_BIN_ID = 88767;
-    int24 public constant MIN_BIN_ID = -88767;
-
     address public immutable override factory;
     address public immutable override token0;
     address public immutable override token1;
     address public override initiator;
+
+    int24 private constant MAX_BIN_ID = 88767;
+    int24 private constant MIN_BIN_ID = -88767;
 
     constructor(
         address _token0,
