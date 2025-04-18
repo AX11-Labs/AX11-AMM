@@ -4,14 +4,22 @@ pragma solidity 0.8.28;
 
 interface IPool {
     error INVALID_ADDRESS();
-    error INVALID_PRICE();
+    error INVALID_BIN_ID();
+    error INVALID_AMOUNT();
     error INSUFFICIENT_LIQUIDITY();
 
     struct PoolInfo {
-        uint256 totalTokenShare0;
-        uint256 totalTokenShare1;
-        uint256 totalLPShareX;
-        uint256 totalLPShareY;
+        uint128 balance0Long;
+        uint128 balance1Long;
+        uint128 balance0Short;
+        uint128 balance1Short;
+        uint256 LPShareXLong;
+        uint256 LPShareYLong;
+        uint256 LPShareXShort;
+        uint256 LPShareYShort;
+    }
+
+    struct PriceInfo {
         int24 activeId;
         int24 minId;
         int24 maxId;
@@ -21,8 +29,8 @@ interface IPool {
     }
 
     struct BinInfo {
-        uint256 binShare0;
-        uint256 binShare1;
+        uint256 balance0;
+        uint256 balance1;
     }
 
     struct LiquidityOption {
@@ -42,6 +50,7 @@ interface IPool {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function initiator() external view returns (address);
+    function sweep(address recipient, bool zeroOrOne, uint256 amount) external returns (uint256 available);
 
     function setInitiator(address _initiator) external;
     function mint(LiquidityOption calldata option) external payable returns (uint256 amountA, uint256 amountB);
