@@ -16,6 +16,8 @@ import {FeeTier} from "./libraries/FeeTier.sol";
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     mapping(int24 => BinInfo) public bins;
     PoolInfo public override poolInfo;
+    PriceInfo public override priceInfo;
+    PriceInfo public override prevPriceInfo;
 
     address public immutable override factory;
     address public immutable override token0;
@@ -46,7 +48,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
     /// @dev equivalent to (1001>>128)/1000, which is 1.001 in 128.128 fixed point
     function getBase() private pure returns (uint256) {
-        return 340622649287859401926837982039199979667; 
+        return 340622649287859401926837982039199979667;
     }
 
     function initialize(int24 _activeId, address _initiator) private {
@@ -55,19 +57,18 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         PoolInfo storage _poolInfo = poolInfo;
 
-        uint256 _share = 1024 << 128; // scaling as 128.128 fixed point
+        uint256 _share = 512 << 128; // scaling as 128.128 fixed point
 
         int24 lowerBin = _activeId - 511;
         int24 upperBin = _activeId + 511;
-        require(lowerBin >= MIN_BIN_ID && upperBin <= MAX_BIN_ID, INVALID_PRICE());
+        require(lowerBin >= MIN_BIN_ID && upperBin <= MAX_BIN_ID, INVALID_BIN_ID());
 
         bins[_activeId] = BinInfo({binShare0: _share, binShare1: _share});
 
-        poolInfo = PoolInfo({
-            totalTokenShare0: _share,
-            totalTokenShare1: _share,
-            totalLPShareX: _share,
-            totalLPShareY: _share,
+        poolInfo =
+            PoolInfo({totalTokenShare0: _share, totalTokenShare1: _share, totalLPShareX: _share, totalLPShareY: _share});
+
+        priceInfo = PriceInfo({
             activeId: _activeId,
             minPrice: lowerBin,
             maxPrice: upperBin,
@@ -76,11 +77,25 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             fee: 30
         });
 
+        prevPriceInfo = priceInfo;
+
         _share >>= 1;
 
         _mint(address(0), _share, _share, _share, _share);
 
         initiator = _initiator;
+    }
+
+    function sweep(address recipient, bool zeroOrOne, uint256 amount) external override returns (uint256 available) {
+        require(msg.sender == factory.owner(), INVALID_ADDRESS());
+        address token = zeroOrOne ? token0 : token1;
+        uint256 totalBalance = zeroOrOne
+            ? (poolInfo.totalBalance0Long + poolInfo.totalBalance0Short)
+            : (poolInfo.totalBalance1Long + poolInfo.totalBalance1Short);
+
+        available = IERC20(token).balanceOf(address(this)) - totalBalance;
+        available -= amount;
+        TransferHelper.safeTransfer(token, recipient, amount);
     }
 
     /// @notice EXCLUDING FEE
@@ -94,8 +109,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     ) private pure returns (uint256 amountOut, uint256 maxAmountIn) {
         amountOut = PriceMath.fullMulDiv(totalAmountOut, binShareOut, totalShareOut); // won't overlow as binShareOut <= totalShareOut
         maxAmountIn = xInYOut
-            ? Uint256x256Math.shiftDivRoundUp(amountOut, 128, Uint128x128Math.pow(getBase(),binId)) // getBase().pow(binId) = price128.128
-            : Uint256x256Math.mulShiftRoundUp(amountOut, Uint128x128Math.pow(getBase(),binId), 128); // getBase().pow(binId) = price128.128
+            ? Uint256x256Math.shiftDivRoundUp(amountOut, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
+            : Uint256x256Math.mulShiftRoundUp(amountOut, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
     }
 
     function swap(address recipient, bool xInYOut, uint256 amountIn)
@@ -103,16 +118,16 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         nonReentrant
         returns (uint256 amountOut)
     {
-        require(amountIn != 0, "ZERO_AMOUNT");
-        (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
+        require(amountIn != 0, INVALID_AMOUNT());
+        uint256 totalBal0 = poolInfo.totalBalance0Long + poolInfo.totalBalance0Short;
+        uint256 totalBal1 = poolInfo.totalBalance1Long + poolInfo.totalBalance1Short;
 
-        uint256 balInBefore = IERC20(tokenIn).balanceOf(address(this));
+        (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        uint256 totalBalOut = IERC20(tokenOut).balanceOf(address(this));
-        amountIn = IERC20(tokenIn).balanceOf(address(this)) - balInBefore; // get actual amountIn
 
         PoolInfo storage _pool = poolInfo;
-        int24 binId = _pool.activeId;
+        PriceInfo storage _priceInfo = priceInfo;
+        int24 binId = _priceInfo.activeId;
         (uint256 totalShareIn, uint256 totalShareOut) = xInYOut
             ? (_pool.totalTokenShare0, _pool.totalTokenShare1)
             : (_pool.totalTokenShare1, _pool.totalTokenShare0);
@@ -163,16 +178,36 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             /// because we already scaled the share by 128 bits, so no oveflow is expected in this lifetime.
             // feeShare does not need to be updated, and so the feeAmount will be portionally shared by all bins available
 
-            binId = xInYOut ? binId - 1 : binId + 1; // need to ensure not exceeding min/max bin
-            require(binId >= MIN_BIN_ID && binId <= MAX_BIN_ID, "INVALID_BIN_ID");
+            bool crossTick;
+            if (xInYOut) {
+                require(binId > MIN_BIN_ID, INVALID_BIN_ID());
+                binId--;
+                if (binId < _pool.tickLower) {
+                    crossTick = true;
+                }
+            } else {
+                require(binId < MAX_BIN_ID, INVALID_BIN_ID());
+                binId++;
+                if (binId > _pool.tickUpper) {
+                    crossTick = true;
+                }
+            }
+
+            if (crossTick) {
+                //activate ALC expansion here
+            }
+            crossTick = false;
         }
 
         _pool.totalTokenShare0 = xInYOut ? totalShareIn : totalShareOut;
         _pool.totalTokenShare1 = xInYOut ? totalShareOut : totalShareIn;
-        _pool.activeId = binId;
+        _priceInfo.activeId = binId;
 
         if (amountOut != 0) {
-            amountOut -= FeeTier.getFee(_pool.maxId - _pool.minId, amountOut);
+            uint256 fee = FeeTier.getFee(_priceInfo.maxId - _priceInfo.minId, amountOut);
+            //fee needs to be in the while loop if we want to update the fee based on ALC
+            amountOut -= fee;
+            if (xInYOut) {}
             TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
         } else {
             revert INSUFFICIENT_LIQUIDITY();
