@@ -12,9 +12,6 @@ interface IPool {
         uint256 totalTokenShare1;
         uint256 totalLPShareX;
         uint256 totalLPShareY;
-    }
-
-    struct PriceInfo {
         int24 activeId;
         int24 minId;
         int24 maxId;
@@ -26,8 +23,6 @@ interface IPool {
     struct BinInfo {
         uint256 binShare0;
         uint256 binShare1;
-        int24 tilBinLower;
-        int24 tilBinUpper;
     }
 
     struct LiquidityOption {
@@ -42,7 +37,6 @@ interface IPool {
     }
 
     function poolInfo() external view returns (PoolInfo memory);
-    function priceInfo() external view returns (PriceInfo memory);
 
     function factory() external view returns (address);
     function token0() external view returns (address);
