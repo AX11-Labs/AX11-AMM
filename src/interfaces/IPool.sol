@@ -34,14 +34,14 @@ interface IPool {
     }
 
     struct LiquidityOption {
-        uint256 amountX;
-        uint256 amountY;
         address recipient;
-        uint256 deadline;
-        uint256 longX;
-        uint256 longY;
-        uint256 shortX;
-        uint256 shortY;
+        int24 minActiveId;
+        int24 maxActiveId;
+        uint128 amountForLongX;
+        uint128 amountForLongY;
+        uint128 amountForShortX;
+        uint128 amountForShortY;
+        uint128 deadline;
     }
 
     function poolInfo() external view returns (PoolInfo memory);
@@ -53,5 +53,8 @@ interface IPool {
     function sweep(address recipient, bool zeroOrOne, uint256 amount) external returns (uint256 available);
 
     function setInitiator(address _initiator) external;
-    function mint(LiquidityOption calldata option) external payable returns (uint256 amountA, uint256 amountB);
+    function mint(LiquidityOption calldata option)
+        external
+        returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
+    function burn(LiquidityOption calldata option) external returns (uint256 amountX, uint256 amountY);
 }
