@@ -15,9 +15,9 @@ import {FeeTier} from "./libraries/FeeTier.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     mapping(int24 => BinInfo) public bins;
-    PoolInfo public override poolInfo;
-    PriceInfo public override priceInfo;
-    PriceInfo public override prevPriceInfo;
+    PoolInfo private poolInfo;
+    PriceInfo private priceInfo;
+    PriceInfo private prevPriceInfo;
 
     address public immutable override factory;
     address public immutable override tokenX;
@@ -116,7 +116,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     /// @param amount The amount of tokens to sweep
     /// @return available The amount of tokens available for sweeping after this operation
     function sweep(address recipient, bool xOrY, uint256 amount) external override returns (uint256 available) {
-        require(msg.sender == factory.sweeper(), INVALID_ADDRESS());
+        require(msg.sender == factory, INVALID_ADDRESS());
         address _token = xOrY ? tokenX : tokenY;
         uint256 totalBalance =
             xOrY ? (poolInfo.balanceXLong + poolInfo.balanceXShort) : (poolInfo.balanceYLong + poolInfo.balanceYShort);
