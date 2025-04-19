@@ -29,7 +29,7 @@ interface IPool {
 
     struct BinInfo {
         uint128 balanceX;
-        uint128 binShareY;
+        uint128 balanceY;
     }
 
     struct LiquidityOption {

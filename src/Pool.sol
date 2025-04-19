@@ -66,16 +66,16 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         int24 _maxId = _activeId + 511;
         require(_minId >= MIN_BIN_ID && _maxId <= MAX_BIN_ID, INVALID_BIN_ID());
 
-        bins[_activeId] = BinInfo({balanceX: 1, binShareY: 1});
+        bins[_activeId] = BinInfo({balanceX: 1, balanceY: 1});
         int24 iteration = _activeId;
         while (iteration < _maxId) {
             iteration++;
-            bins[iteration] = BinInfo({balanceX: 0, binShareY: 1});
+            bins[iteration] = BinInfo({balanceX: 0, balanceY: 1});
         }
         iteration = _activeId;
         while (iteration > _minId) {
             iteration--;
-            bins[iteration] = BinInfo({balanceX: 1, binShareY: 0});
+            bins[iteration] = BinInfo({balanceX: 1, balanceY: 0});
         }
 
         uint256 _share = 256 << 128; // scaling as 128.128 fixed point
