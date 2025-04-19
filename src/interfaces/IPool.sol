@@ -3,7 +3,6 @@
 pragma solidity 0.8.28;
 
 interface IPool {
-    error INVALID_ADDRESS();
     error INVALID_BIN_ID();
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
@@ -44,11 +43,9 @@ interface IPool {
         uint128 deadline;
     }
 
-    function poolInfo() external view returns (PoolInfo memory);
-
     function factory() external view returns (address);
-    function token0() external view returns (address);
-    function token1() external view returns (address);
+    function tokenX() external view returns (address);
+    function tokenY() external view returns (address);
     function initiator() external view returns (address);
     function sweep(address recipient, bool zeroOrOne, uint256 amount) external returns (uint256 available);
 
