@@ -12,8 +12,11 @@ import {PriceMath} from "./libraries/PriceMath.sol";
 import {Uint256x256Math} from "./libraries/Math/Uint256x256Math.sol";
 import {Uint128x128Math} from "./libraries/Math/Uint128x128Math.sol";
 import {FeeTier} from "./libraries/FeeTier.sol";
+import {SafeCast} from "./libraries/Math/SafeCast.sol";
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
+    using SafeCast for uint256;
+
     mapping(int24 => BinInfo) public bins;
     PoolInfo private poolInfo;
     PriceInfo private priceInfo;
@@ -59,8 +62,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     function initialize(int24 _activeId, address _initiator) private {
         TransferHelper.safeTransferFrom(tokenX, _initiator, address(this), 512);
         TransferHelper.safeTransferFrom(tokenY, _initiator, address(this), 512);
-
-        PoolInfo storage _poolInfo = poolInfo;
 
         int24 _minId = _activeId - 511;
         int24 _maxId = _activeId + 511;
@@ -138,15 +139,15 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             : Uint256x256Math.mulShiftRoundUp(balance, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
     }
 
-    function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
+    function swap(address recipient, bool xInYOut, uint128 amountIn, uint128 minAmountOut, uint256 deadline)
         external
         ensure(deadline)
         nonReentrant
-        returns (uint256 amountOut)
+        returns (uint128 amountOut)
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
-        uint256 totalBalX = poolInfo.balanceXLong + poolInfo.balanceXShort;
-        uint256 totalBalY = poolInfo.balanceYLong + poolInfo.balanceYShort;
+        uint128 totalBalX = poolInfo.balanceXLong + poolInfo.balanceXShort;
+        uint128 totalBalY = poolInfo.balanceYLong + poolInfo.balanceYShort;
 
         (address tokenIn, address tokenOut) = xInYOut ? (tokenX, tokenY) : (tokenY, tokenX);
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
@@ -156,18 +157,17 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         int24 binId = _priceInfo.activeId;
 
-        (uint256 totalBalIn, uint256 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
+        (uint128 totalBalIn, uint128 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
 
-        uint256 binBalanceIn;
-        uint256 binBalanceOut;
-        uint256 feeAmount;
-        uint256 maxAmountIn;
+        uint128 binBalanceIn;
+        uint128 binBalanceOut;
+        uint128 maxAmountIn;
 
         while (true) {
             BinInfo storage _bin = bins[binId];
             (binBalanceIn, binBalanceOut) = xInYOut ? (_bin.balanceX, _bin.balanceY) : (_bin.balanceY, _bin.balanceX);
 
-            (maxAmountIn) = _getAmountInFromBin(xInYOut, binId, binBalanceOut);
+            (maxAmountIn) = _getAmountInFromBin(xInYOut, binId, binBalanceOut).safe128();
 
             if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
@@ -175,7 +175,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
                 totalBalOut -= binBalanceOut;
                 binBalanceOut = 0;
             } else {
-                uint256 useAmountOut = PriceMath.fullMulDiv(amountIn, binBalanceOut, maxAmountIn); // won't overlow as remainingAmount < balIn
+                uint128 useAmountOut = (PriceMath.fullMulDiv(amountIn, binBalanceOut, maxAmountIn)).safe128(); // won't overlow as remainingAmount < balIn
                 amountOut += useAmountOut;
                 binBalanceOut -= useAmountOut;
                 totalBalOut -= useAmountOut;
@@ -212,18 +212,18 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             // crossTick = false;
         }
 
-        uint256 range = _priceInfo.maxId - _priceInfo.minId + 1; // we will come back to fix this because maxId and minId can be updated
-        uint256 fee = FeeTier.getFee(range, amountOut);
-        uint256 feeInAmountIn = FeeTier.getFee(range, amountIn);
+        uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
+        uint128 fee = FeeTier.getFee(range, amountOut);
+        uint128 feeInAmountIn = FeeTier.getFee(range, amountIn);
 
-        uint256 newBalXLong;
-        uint256 newBalYLong;
-        uint256 newBalXShort;
-        uint256 newBalYShort;
+        uint128 newBalXLong;
+        uint128 newBalYLong;
+        uint128 newBalXShort;
+        uint128 newBalYShort;
 
         if (xInYOut) {
-            newBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceXLong, totalBalX);
-            newBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceYLong, totalBalY);
+            newBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceXLong, totalBalX).safe128();
+            newBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceYLong, totalBalY).safe128();
             newBalXShort = totalBalIn - newBalXLong;
             newBalYShort = totalBalOut - newBalYLong;
 
@@ -240,8 +240,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
                 newBalXShort += feeInAmountIn;
             }
         } else {
-            newBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceXLong, totalBalX);
-            newBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceYLong, totalBalY);
+            newBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceXLong, totalBalX).safe128();
+            newBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceYLong, totalBalY).safe128();
             newBalXShort = totalBalOut - newBalXLong;
             newBalYShort = totalBalIn - newBalYLong;
 
@@ -331,28 +331,32 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     {
         address sender = msg.sender;
         PoolInfo storage _pool = poolInfo;
-        uint256 amountDeducted;
+        uint128 amountDeducted;
         // Calculate amounts to withdraw based on LP shares
         if (option.amountForLongX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, _pool.balanceXLong, _pool.LPShareXLong);
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForLongX, _pool.balanceXLong, _pool.LPShareXLong).safe128();
             _pool.balanceXLong -= amountDeducted;
             _pool.LPShareXLong -= option.amountForLongX;
             amountX += amountDeducted;
         }
         if (option.amountForShortX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, _pool.balanceXShort, _pool.LPShareXShort);
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForShortX, _pool.balanceXShort, _pool.LPShareXShort).safe128();
             _pool.balanceXShort -= amountDeducted;
             _pool.LPShareXShort -= option.amountForShortX;
             amountX += amountDeducted;
         }
         if (option.amountForLongY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, _pool.balanceYLong, _pool.LPShareYLong);
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForLongY, _pool.balanceYLong, _pool.LPShareYLong).safe128();
             _pool.balanceYLong -= amountDeducted;
             _pool.LPShareYLong -= option.amountForLongY;
             amountY += amountDeducted;
         }
         if (option.amountForShortY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, _pool.balanceYShort, _pool.LPShareYShort);
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForShortY, _pool.balanceYShort, _pool.LPShareYShort).safe128();
             _pool.balanceYShort -= amountDeducted;
             _pool.LPShareYShort -= option.amountForShortY;
             amountY += amountDeducted;
