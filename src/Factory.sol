@@ -7,44 +7,46 @@ import {Pool} from "./Pool.sol";
 import {IERC20Metadata} from "./interfaces/IERC20Metadata.sol";
 
 contract Factory is IFactory {
-    mapping(address token0 => mapping(address token1 => address pool)) public override getPool;
+    mapping(address tokenX => mapping(address tokenY => address pool)) public override getPool;
     mapping(address => PoolInfo) public override getTokens;
 
     uint256 public override totalPools;
     address public override feeTo;
     address public override owner;
+    address public override sweeper;
 
     constructor() {
         owner = msg.sender;
         feeTo = msg.sender;
+        sweeper = msg.sender;
     }
 
-    function createPool(address token0, address token1, int24 activeId) external override returns (address pool) {
-        if (token0 == token1) {
+    function createPool(address tokenX, address tokenY, int24 activeId) external override returns (address pool) {
+        if (tokenX == tokenY) {
             revert INVALID_ADDRESS();
-        } else if (token0 > token1) {
-            (token0, token1) = (token1, token0);
+        } else if (tokenX > tokenY) {
+            (tokenX, tokenY) = (tokenY, tokenX);
         }
 
-        require(getPool[token0][token1] == address(0), CREATED());
+        require(getPool[tokenX][tokenY] == address(0), CREATED());
 
         string memory _name =
-            string.concat("Ax11 Pool [", IERC20Metadata(token0).name(), "/", IERC20Metadata(token1).name(), "]");
+            string.concat("Ax11 Pool [", IERC20Metadata(tokenX).name(), "/", IERC20Metadata(tokenY).name(), "]");
         string memory _symbol =
-            string.concat("Ax11-LP [", IERC20Metadata(token0).symbol(), "/", IERC20Metadata(token1).symbol(), "]");
+            string.concat("Ax11-LP [", IERC20Metadata(tokenX).symbol(), "/", IERC20Metadata(tokenY).symbol(), "]");
         pool = address(
-            new Pool{salt: keccak256(abi.encodePacked(token0, token1))}(
-                token0, token1, activeId, msg.sender, _name, _symbol
+            new Pool{salt: keccak256(abi.encodePacked(tokenX, tokenY))}(
+                tokenX, tokenY, activeId, msg.sender, _name, _symbol
             )
         );
 
-        getPool[token0][token1] = pool;
-        getPool[token1][token0] = pool; // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
-        getTokens[pool] = PoolInfo({token0: token0, token1: token1});
+        getPool[tokenX][tokenY] = pool;
+        getPool[tokenY][tokenX] = pool; // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
+        getTokens[pool] = PoolInfo({tokenX: tokenX, tokenY: tokenY});
 
         totalPools++;
 
-        emit PoolCreated(token0, token1, pool);
+        emit PoolCreated(tokenX, tokenY, pool);
     }
 
     function setOwner(address _owner) external override {
@@ -55,5 +57,10 @@ contract Factory is IFactory {
     function setFeeTo(address _feeTo) external override {
         require(msg.sender == owner, NOT_OWNER());
         feeTo = _feeTo;
+    }
+
+    function setSweeper(address _sweeper) external override {
+        require(msg.sender == owner, NOT_OWNER());
+        sweeper = _sweeper;
     }
 }

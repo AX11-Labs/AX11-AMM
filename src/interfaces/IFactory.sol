@@ -15,17 +15,17 @@ interface IFactory {
     error CREATED();
 
     /// @notice Emitted when a new pool is created
-    /// @param token0 The first token of the pool (lower address)
-    /// @param token1 The second token of the pool (higher address)
+    /// @param tokenX The first token of the pool (lower address)
+    /// @param tokenY The second token of the pool (higher address)
     /// @param pool The address of the newly created pool
-    event PoolCreated(address indexed token0, address indexed token1, address pool);
+    event PoolCreated(address indexed tokenX, address indexed tokenY, address pool);
 
     /// @notice Structure containing information about a pool
-    /// @param token0 The address of the first token in the pool (lower address)
-    /// @param token1 The address of the second token in the pool (higher address)
+    /// @param tokenX The address of the first token in the pool (lower address)
+    /// @param tokenY The address of the second token in the pool (higher address)
     struct PoolInfo {
-        address token0;
-        address token1;
+        address tokenX;
+        address tokenY;
     }
 
     /// @notice Returns the total number of pools created
@@ -41,25 +41,25 @@ interface IFactory {
     function owner() external view returns (address);
 
     /// @notice Fetches the pool address for a given pair of tokens
-    /// @dev The order of token0 and token1 doesn't matter, as the factory handles sorting
-    /// @param token0 The address of the first token
-    /// @param token1 The address of the second token
+    /// @dev The order of tokenX and tokenY doesn't matter, as the factory handles sorting
+    /// @param tokenX The address of the first token
+    /// @param tokenY The address of the second token
     /// @return pool The address of the pool for the token pair, or address(0) if it doesn't exist
-    function getPool(address token0, address token1) external view returns (address pool);
+    function getPool(address tokenX, address tokenY) external view returns (address pool);
 
     /// @notice Retrieves the tokens associated with a pool
     /// @param pool The address of the pool
-    /// @return token0 The address of the first token (lower address)
-    /// @return token1 The address of the second token (higher address)
-    function getTokens(address pool) external view returns (address token0, address token1);
+    /// @return tokenX The address of the first token (lower address)
+    /// @return tokenY The address of the second token (higher address)
+    function getTokens(address pool) external view returns (address tokenX, address tokenY);
 
     /// @notice Creates a new pool for a pair of tokens
-    /// @dev Tokens are automatically sorted so token0 is always the lower address
-    /// @param token0 The address of the first token
-    /// @param token1 The address of the second token
+    /// @dev Tokens are automatically sorted so tokenX is always the lower address
+    /// @param tokenX The address of the first token
+    /// @param tokenY The address of the second token
     /// @param activeId The active bin of the pool
     /// @return pool The address of the newly created pool
-    function createPool(address token0, address token1, int24 activeId) external returns (address pool);
+    function createPool(address tokenX, address tokenY, int24 activeId) external returns (address pool);
 
     /// @notice Updates the owner of the factory
     /// @dev Can only be called by the current owner
@@ -70,4 +70,9 @@ interface IFactory {
     /// @dev Can only be called by the current owner
     /// @param _feeTo The new address to receive protocol fees
     function setFeeTo(address _feeTo) external;
+
+    /// @notice Updates the sweeper address
+    /// @dev Can only be called by the current owner
+    /// @param _sweeper The new address to receive swept tokens
+    function setSweeper(address _sweeper) external;
 }
