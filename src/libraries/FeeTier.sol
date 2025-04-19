@@ -3,26 +3,27 @@
 pragma solidity 0.8.28;
 
 library FeeTier {
-    function getFee(uint256 priceRange, uint256 value) internal pure returns (uint256 feeAmount) {
+    function getFee(uint256 priceRange, uint128 value) internal pure returns (uint128 feeAmount) {
+        uint8 tier;
         if (priceRange < 65) {
-            feeAmount = value * 10;
+            tier = 10;
         } else if (priceRange < 129) {
-            feeAmount = value * 15;
+            tier = 15;
         } else if (priceRange < 193) {
-            feeAmount = value * 20;
+            tier = 20;
         } else if (priceRange < 257) {
-            feeAmount = value * 25;
+            tier = 25;
         } else if (priceRange < 321) {
-            feeAmount = value * 30;
+            tier = 30;
         } else if (priceRange < 385) {
-            feeAmount = value * 35;
+            tier = 35;
         } else if (priceRange < 449) {
-            feeAmount = value * 40;
+            tier = 40;
         } else if (priceRange < 513) {
-            feeAmount = value * 45;
+            tier = 45;
         } else {
-            feeAmount = value * 50;
+            tier = 50;
         }
-        feeAmount /= 10000;
+        feeAmount = (value * tier) / 10_000;
     }
 }
