@@ -28,6 +28,10 @@ interface IFactory {
         address tokenY;
     }
 
+    /// @notice Returns the address of the sweeper
+    /// @return The address of the sweeper
+    function sweeper() external view returns (address);
+
     /// @notice Returns the total number of pools created
     /// @return The number of pools deployed by this factory
     function totalPools() external view returns (uint256);
@@ -75,4 +79,12 @@ interface IFactory {
     /// @dev Can only be called by the current owner
     /// @param _sweeper The new address to receive swept tokens
     function setSweeper(address _sweeper) external;
+
+    /// @notice Sweeps tokens from a pool
+    /// @dev Can only be called by the sweeper
+    /// @param recipient The address to receive the swept tokens
+    /// @param pool The address of the pool
+    /// @param zeroOrOne Whether to sweep tokenX or tokenY
+    /// @param amount The amount of tokens to sweep
+    function poolSweep(address recipient, address pool, bool zeroOrOne, uint256 amount) external;
 }
