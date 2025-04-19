@@ -20,24 +20,24 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     PriceInfo public override prevPriceInfo;
 
     address public immutable override factory;
-    address public immutable override token0;
-    address public immutable override token1;
+    address public immutable override tokenX;
+    address public immutable override tokenY;
     address public override initiator;
 
     int24 private constant MAX_BIN_ID = 88767;
     int24 private constant MIN_BIN_ID = -88767;
 
     constructor(
-        address _token0,
-        address _token1,
+        address _tokenX,
+        address _tokenY,
         int24 _activeId,
         address _initiator,
         string memory name,
         string memory symbol
     ) Ax11Lp(name, symbol) {
         factory = msg.sender;
-        token0 = _token0;
-        token1 = _token1;
+        tokenX = _tokenX;
+        tokenY = _tokenY;
         initialize(_activeId, _initiator);
     }
 
@@ -51,166 +51,221 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         return 340622649287859401926837982039199979667;
     }
 
+    /// @notice Initialize the pool
+    /// @param _activeId The active bin id
+    /// @param _initiator The initiator of the pool
+    /// @dev we assume the amount received by the pool is ALWAYS equal to transferFrom value of 512
+    /// Note: meaning that we don't support fee-on-transfer tokens
     function initialize(int24 _activeId, address _initiator) private {
-        TransferHelper.safeTransferFrom(token0, _initiator, address(this), 1024);
-        TransferHelper.safeTransferFrom(token1, _initiator, address(this), 1024);
+        TransferHelper.safeTransferFrom(tokenX, _initiator, address(this), 512);
+        TransferHelper.safeTransferFrom(tokenY, _initiator, address(this), 512);
 
         PoolInfo storage _poolInfo = poolInfo;
 
-        uint256 _share = 512 << 128; // scaling as 128.128 fixed point
+        int24 _minId = _activeId - 511;
+        int24 _maxId = _activeId + 511;
+        require(_minId >= MIN_BIN_ID && _maxId <= MAX_BIN_ID, INVALID_BIN_ID());
 
-        int24 lowerBin = _activeId - 511;
-        int24 upperBin = _activeId + 511;
-        require(lowerBin >= MIN_BIN_ID && upperBin <= MAX_BIN_ID, INVALID_BIN_ID());
+        bins[_activeId] = BinInfo({balanceX: 1, binShareY: 1});
+        int24 iteration = _activeId;
+        while (iteration < _maxId) {
+            iteration++;
+            bins[iteration] = BinInfo({balanceX: 0, binShareY: 1});
+        }
+        iteration = _activeId;
+        while (iteration > _minId) {
+            iteration--;
+            bins[iteration] = BinInfo({balanceX: 1, binShareY: 0});
+        }
 
-        bins[_activeId] = BinInfo({binShare0: _share, binShare1: _share});
+        uint256 _share = 256 << 128; // scaling as 128.128 fixed point
 
-        poolInfo =
-            PoolInfo({totalTokenShare0: _share, totalTokenShare1: _share, totalLPShareX: _share, totalLPShareY: _share});
+        poolInfo = PoolInfo({
+            balanceXLong: 256,
+            balanceYLong: 256,
+            balanceXShort: 256,
+            balanceYShort: 256,
+            LPShareXLong: _share,
+            LPShareYLong: _share,
+            LPShareXShort: _share,
+            LPShareYShort: _share
+        });
 
         priceInfo = PriceInfo({
             activeId: _activeId,
-            minPrice: lowerBin,
-            maxPrice: upperBin,
-            tickUpper: (_activeId + upperBin) >> 1, // round down
-            tickLower: (_activeId + lowerBin) >> 1, // round down
+            minId: _minId,
+            maxId: _maxId,
+            tickUpper: (_activeId + _maxId) >> 1, // round down
+            tickLower: (_activeId + _minId) >> 1, // round down
             fee: 30
         });
 
         prevPriceInfo = priceInfo;
-
-        _share >>= 1;
-
-        _mint(address(0), _share, _share, _share, _share);
-
         initiator = _initiator;
+        _mint(address(0), _share, _share, _share, _share);
     }
 
-    function sweep(address recipient, bool zeroOrOne, uint256 amount) external override returns (uint256 available) {
-        require(msg.sender == factory.owner(), INVALID_ADDRESS());
-        address token = zeroOrOne ? token0 : token1;
-        uint256 totalBalance = zeroOrOne
-            ? (poolInfo.totalBalance0Long + poolInfo.totalBalance0Short)
-            : (poolInfo.totalBalance1Long + poolInfo.totalBalance1Short);
+    /// @notice Recovers tokens that are accidentally sent to the contract
+    /// @dev This function can only be called by the factory owner
+    ///      It calculates the excess tokens by comparing actual balance with tracked pool balance (long + short)
+    ///      The excess tokens can then be swept to a specified recipient
+    ///      This is useful for recovering tokens that are not part of the pool's managed liquidity
+    ///      Note: This function does not support fee-on-transfer tokens
+    /// @param recipient The address to receive the swept tokens
+    /// @param xOrY True for tokenX (tokenX), false for tokenY (tokenY)
+    /// @param amount The amount of tokens to sweep
+    /// @return available The amount of tokens available for sweeping after this operation
+    function sweep(address recipient, bool xOrY, uint256 amount) external override returns (uint256 available) {
+        require(msg.sender == factory.sweeper(), INVALID_ADDRESS());
+        address _token = xOrY ? tokenX : tokenY;
+        uint256 totalBalance =
+            xOrY ? (poolInfo.balanceXLong + poolInfo.balanceXShort) : (poolInfo.balanceYLong + poolInfo.balanceYShort);
 
-        available = IERC20(token).balanceOf(address(this)) - totalBalance;
+        available = IERC20(_token).balanceOf(address(this)) - totalBalance;
         available -= amount;
-        TransferHelper.safeTransfer(token, recipient, amount);
+        TransferHelper.safeTransfer(_token, recipient, amount);
     }
 
     /// @notice EXCLUDING FEE
-    /// @notice This is only for calculating the amountOut within a single bin.
-    function _getAmountFromBin(
-        bool xInYOut,
-        int24 binId,
-        uint256 binShareOut,
-        uint256 totalShareOut,
-        uint256 totalAmountOut
-    ) private pure returns (uint256 amountOut, uint256 maxAmountIn) {
-        amountOut = PriceMath.fullMulDiv(totalAmountOut, binShareOut, totalShareOut); // won't overlow as binShareOut <= totalShareOut
+    /// @notice This is only for calculating the amountIn within a single bin.
+    function _getAmountInFromBin(bool xInYOut, int24 binId, uint256 balance)
+        private
+        pure
+        returns (uint256 maxAmountIn)
+    {
         maxAmountIn = xInYOut
-            ? Uint256x256Math.shiftDivRoundUp(amountOut, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
-            : Uint256x256Math.mulShiftRoundUp(amountOut, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
+            ? Uint256x256Math.shiftDivRoundUp(balance, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
+            : Uint256x256Math.mulShiftRoundUp(balance, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
     }
 
-    function swap(address recipient, bool xInYOut, uint256 amountIn)
+    function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut)
         external
         nonReentrant
         returns (uint256 amountOut)
     {
-        require(amountIn != 0, INVALID_AMOUNT());
-        uint256 totalBal0 = poolInfo.totalBalance0Long + poolInfo.totalBalance0Short;
-        uint256 totalBal1 = poolInfo.totalBalance1Long + poolInfo.totalBalance1Short;
+        require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
+        uint256 totalBalX = poolInfo.balanceXLong + poolInfo.balanceXShort;
+        uint256 totalBalY = poolInfo.balanceYLong + poolInfo.balanceYShort;
 
-        (address tokenIn, address tokenOut) = xInYOut ? (token0, token1) : (token1, token0);
+        (address tokenIn, address tokenOut) = xInYOut ? (tokenX, tokenY) : (tokenY, tokenX);
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
         PoolInfo storage _pool = poolInfo;
         PriceInfo storage _priceInfo = priceInfo;
-        int24 binId = _priceInfo.activeId;
-        (uint256 totalShareIn, uint256 totalShareOut) = xInYOut
-            ? (_pool.totalTokenShare0, _pool.totalTokenShare1)
-            : (_pool.totalTokenShare1, _pool.totalTokenShare0);
 
-        uint256 binShareIn;
-        uint256 binShareOut;
-        uint256 available;
+        int24 binId = _priceInfo.activeId;
+
+        (uint256 totalBalIn, uint256 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
+
+        uint256 binBalanceIn;
+        uint256 binBalanceOut;
         uint256 feeAmount;
-        uint256 additionalShareIn;
         uint256 maxAmountIn;
 
         while (true) {
             BinInfo storage _bin = bins[binId];
-            (binShareIn, binShareOut) = xInYOut ? (_bin.binShare0, _bin.binShare1) : (_bin.binShare1, _bin.binShare0);
-            (available, maxAmountIn) = _getAmountFromBin(xInYOut, binId, binShareOut, totalShareOut, totalBalOut);
+            (binBalanceIn, binBalanceOut) = xInYOut ? (_bin.balanceX, _bin.balanceY) : (_bin.balanceY, _bin.balanceX);
 
-            if (available == 0) {
-                if (amountOut != 0) {
-                    TransferHelper.safeTransfer(tokenIn, recipient, amountIn); // refund
-                    maxAmountIn = 0;
-                    amountIn = 0;
-                }
-            } else if (amountIn >= maxAmountIn) {
+            (maxAmountIn) = _getAmountInFromBin(xInYOut, binId, binBalanceOut);
+
+            if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
-                amountOut += available;
-                totalShareOut -= binShareOut;
-                binShareOut = 0;
+                amountOut += binBalanceOut;
+                totalBalOut -= binBalanceOut;
+                binBalanceOut = 0;
             } else {
-                uint256 useAmountOut = PriceMath.fullMulDiv(amountIn, available, maxAmountIn); // won't overlow as remainingAmount < balIn
+                uint256 useAmountOut = PriceMath.fullMulDiv(amountIn, binBalanceOut, maxAmountIn); // won't overlow as remainingAmount < balIn
                 amountOut += useAmountOut;
-                uint256 removedShareOut = PriceMath.fullMulDiv(binShareOut, useAmountOut, available); // won't overlow as useAmountOut < available
-                binShareOut -= removedShareOut;
-                totalShareOut -= removedShareOut;
+                binBalanceOut -= useAmountOut;
+                totalBalOut -= useAmountOut;
                 maxAmountIn = amountIn;
                 amountIn = 0;
             }
 
             // Unified share calculation and update
-            additionalShareIn = PriceMath.fullMulDiv(maxAmountIn, totalShareIn, balInBefore);
-            binShareIn += additionalShareIn;
-            totalShareIn += additionalShareIn;
+            binBalanceIn += maxAmountIn;
+            totalBalIn += maxAmountIn;
 
-            _bin.binShare0 = xInYOut ? binShareIn : binShareOut;
-            _bin.binShare1 = xInYOut ? binShareOut : binShareIn;
+            _bin.balanceX = xInYOut ? binBalanceIn : binBalanceOut;
+            _bin.balanceY = xInYOut ? binBalanceOut : binBalanceIn;
 
             if (amountIn == 0) break;
-            /// @dev in case of a perfect drain, we don't increase binShareOut and it's fine
-            /// because we already scaled the share by 128 bits, so no oveflow is expected in this lifetime.
-            // feeShare does not need to be updated, and so the feeAmount will be portionally shared by all bins available
+            // bool crossTick;
+            // if (xInYOut) {
+            //     require(binId > MIN_BIN_ID, INVALID_BIN_ID());
+            //     binId--;
+            //     if (binId < _pool.tickLower) {
+            //         crossTick = true;
+            //     }
+            // } else {
+            //     require(binId < MAX_BIN_ID, INVALID_BIN_ID());
+            //     binId++;
+            //     if (binId > _pool.tickUpper) {
+            //         crossTick = true;
+            //     }
+            // }
 
-            bool crossTick;
-            if (xInYOut) {
-                require(binId > MIN_BIN_ID, INVALID_BIN_ID());
-                binId--;
-                if (binId < _pool.tickLower) {
-                    crossTick = true;
-                }
-            } else {
-                require(binId < MAX_BIN_ID, INVALID_BIN_ID());
-                binId++;
-                if (binId > _pool.tickUpper) {
-                    crossTick = true;
-                }
-            }
-
-            if (crossTick) {
-                //activate ALC expansion here
-            }
-            crossTick = false;
+            // if (crossTick) {
+            //     //activate ALC expansion here
+            // }
+            // crossTick = false;
         }
 
-        _pool.totalTokenShare0 = xInYOut ? totalShareIn : totalShareOut;
-        _pool.totalTokenShare1 = xInYOut ? totalShareOut : totalShareIn;
-        _priceInfo.activeId = binId;
+        uint256 range = _priceInfo.maxId - _priceInfo.minId + 1; // we will come back to fix this because maxId and minId can be updated
+        uint256 fee = FeeTier.getFee(range, amountOut);
+        uint256 feeInAmountIn = FeeTier.getFee(range, amountIn);
 
-        if (amountOut != 0) {
-            uint256 fee = FeeTier.getFee(_priceInfo.maxId - _priceInfo.minId, amountOut);
-            //fee needs to be in the while loop if we want to update the fee based on ALC
-            amountOut -= fee;
-            if (xInYOut) {}
+        uint256 newBalXLong;
+        uint256 newBalYLong;
+        uint256 newBalXShort;
+        uint256 newBalYShort;
+
+        if (xInYOut) {
+            newBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceXLong, totalBalX);
+            newBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceYLong, totalBalY);
+            newBalXShort = totalBalIn - newBalXLong;
+            newBalYShort = totalBalOut - newBalYLong;
+
+            if (newBalYShort + fee >= range) { // ensure sufficient liquidity
+                newBalYShort -= fee;
+                newBalYLong += fee;
+            }
+            newBalYLong += fee; // twice
+
+            if (newBalXLong + fee >= range) { // ensure sufficient liquidity
+                newBalXLong -= feeInAmountIn;
+                newBalXShort += feeInAmountIn;
+            }
+        } else {
+            newBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceXLong, totalBalX);
+            newBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceYLong, totalBalY);
+            newBalXShort = totalBalOut - newBalXLong;
+            newBalYShort = totalBalIn - newBalYLong;
+
+            if (newBalXShort + fee >= range) { // ensure sufficient liquidity
+                newBalXShort -= fee;
+                newBalXLong += fee;
+            }
+            newBalXLong += fee; // twice
+
+            if (newBalYLong + fee >= range) { // ensure sufficient liquidity
+                newBalYLong -= feeInAmountIn;
+                newBalYShort += feeInAmountIn;
+            }
+        }
+
+        _pool.balanceXLong = newBalXLong;
+        _pool.balanceYLong = newBalYLong;
+        _pool.balanceXShort = newBalXShort;
+        _pool.balanceYShort = newBalYShort;
+
+        _priceInfo.activeId = binId;
+        amountOut -= fee;
+
+        if (amountOut >= minAmountOut) {
             TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
         } else {
-            revert INSUFFICIENT_LIQUIDITY();
+            revert SLIPPAGE_EXCEEDED();
         }
 
         return amountOut;
