@@ -63,4 +63,9 @@ contract Factory is IFactory {
         require(msg.sender == owner, NOT_OWNER());
         sweeper = _sweeper;
     }
+
+    function poolSweep(address recipient, address pool, bool zeroOrOne, uint256 amount) external override {
+        require(msg.sender == sweeper, NOT_OWNER());
+        Pool(pool).sweep(recipient, zeroOrOne, amount);
+    }
 }
