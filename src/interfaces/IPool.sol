@@ -6,13 +6,13 @@ interface IPool {
     error INVALID_ADDRESS();
     error INVALID_BIN_ID();
     error INVALID_AMOUNT();
-    error INSUFFICIENT_LIQUIDITY();
+    error SLIPPAGE_EXCEEDED();
 
     struct PoolInfo {
-        uint128 balance0Long;
-        uint128 balance1Long;
-        uint128 balance0Short;
-        uint128 balance1Short;
+        uint128 balanceXLong;
+        uint128 balanceYLong;
+        uint128 balanceXShort;
+        uint128 balanceYShort;
         uint256 LPShareXLong;
         uint256 LPShareYLong;
         uint256 LPShareXShort;
@@ -29,13 +29,13 @@ interface IPool {
     }
 
     struct BinInfo {
-        uint256 balance0;
-        uint256 balance1;
+        uint128 balanceX;
+        uint128 binShareY;
     }
 
     struct LiquidityOption {
-        uint256 amount0;
-        uint256 amount1;
+        uint256 amountX;
+        uint256 amountY;
         address recipient;
         uint256 deadline;
         uint256 longX;
