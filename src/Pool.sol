@@ -44,6 +44,18 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         initialize(_activeId, _initiator);
     }
 
+    function getPoolInfo() public view override returns (PoolInfo memory) {
+        return poolInfo;
+    }
+
+    function getPriceInfo() public view override returns (PriceInfo memory) {
+        return priceInfo;
+    }
+
+    function getPrevPriceInfo() public view override returns (PriceInfo memory) {
+        return prevPriceInfo;
+    }
+
     function setInitiator(address _initiator) external override {
         require(msg.sender == initiator, INVALID_ADDRESS());
         initiator = _initiator;
@@ -125,6 +137,30 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         available = IERC20(_token).balanceOf(address(this)) - totalBalance;
         available -= amount;
         TransferHelper.safeTransfer(_token, recipient, amount);
+    }
+
+    /// @notice Get the amount of tokens that can be swept
+    /// @return availableX The amount of tokenX that can be swept
+    /// @return availableY The amount of tokenY that can be swept
+    function getSweepable() public view returns (uint256 availableX, uint256 availableY) {
+        (uint256 totalBalanceX, uint256 totalBalanceY) =
+            ((poolInfo.balanceXLong + poolInfo.balanceXShort), (poolInfo.balanceYLong + poolInfo.balanceYShort));
+
+        availableX = IERC20(tokenX).balanceOf(address(this));
+        availableY = IERC20(tokenY).balanceOf(address(this));
+        if (availableX > totalBalanceX) {
+            availableX -= totalBalanceX;
+        } else {
+            availableX = 0;
+        }
+
+        if (availableY > totalBalanceY) {
+            availableY -= totalBalanceY;
+        } else {
+            availableY = 0;
+        }
+
+        return (availableX, availableY);
     }
 
     /// @notice EXCLUDING FEE
