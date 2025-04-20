@@ -12,10 +12,12 @@ interface IPool {
         uint128 balanceYLong;
         uint128 balanceXShort;
         uint128 balanceYShort;
-        uint256 LPShareXLong;
-        uint256 LPShareYLong;
-        uint256 LPShareXShort;
-        uint256 LPShareYShort;
+        uint256 totalShareX; // 128.128 fixed point
+        uint256 totalShareY; // 128.128 fixed point
+        uint256 LPShareXLong; // 128.128 fixed point
+        uint256 LPShareYLong; // 128.128 fixed point
+        uint256 LPShareXShort; // 128.128 fixed point
+        uint256 LPShareYShort; // 128.128 fixed point
     }
 
     struct PriceInfo {
@@ -27,9 +29,9 @@ interface IPool {
         uint8 fee;
     }
 
-    struct BinInfo {
-        uint128 balanceX;
-        uint128 balanceY;
+    struct MarketBin {
+        uint256 shareX; //128.128 fixed point
+        uint256 shareY; //128.128 fixed point
     }
 
     struct LiquidityOption {
@@ -40,7 +42,7 @@ interface IPool {
         uint128 amountForLongY;
         uint128 amountForShortX;
         uint128 amountForShortY;
-        uint128 deadline;
+        uint256 deadline;
     }
 
     function factory() external view returns (address);
