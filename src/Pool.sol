@@ -17,10 +17,12 @@ import {SafeCast} from "./libraries/Math/SafeCast.sol";
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     using SafeCast for uint256;
 
-    mapping(int24 => BinInfo) public bins;
+    mapping(int24 => uint256) public bins; // 128.128 fixed point
+
     PoolInfo private poolInfo;
     PriceInfo private priceInfo;
     PriceInfo private prevPriceInfo;
+    MarketBin private marketBin;
 
     address public immutable override factory;
     address public immutable override tokenX;
@@ -79,29 +81,33 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         int24 _maxId = _activeId + 511;
         require(_minId >= MIN_BIN_ID && _maxId <= MAX_BIN_ID, INVALID_BIN_ID());
 
-        bins[_activeId] = BinInfo({balanceX: 1, balanceY: 1});
+        marketBin = MarketBin({shareX: 1, shareY: 1});
         int24 iteration = _activeId;
+        uint256 _binShare = 1 << 128; // scaling as 128.128 fixed point
         while (iteration < _maxId) {
             iteration++;
-            bins[iteration] = BinInfo({balanceX: 0, balanceY: 1});
+            bins[iteration] = _binShare;
         }
         iteration = _activeId;
         while (iteration > _minId) {
             iteration--;
-            bins[iteration] = BinInfo({balanceX: 1, balanceY: 0});
+            bins[iteration] = _binShare;
         }
 
-        uint256 _share = 256 << 128; // scaling as 128.128 fixed point
+        uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
+        uint256 _lpShare = _tokenShare >> 1;
 
         poolInfo = PoolInfo({
             balanceXLong: 256,
             balanceYLong: 256,
             balanceXShort: 256,
             balanceYShort: 256,
-            LPShareXLong: _share,
-            LPShareYLong: _share,
-            LPShareXShort: _share,
-            LPShareYShort: _share
+            totalShareX: _tokenShare,
+            totalShareY: _tokenShare,
+            LPShareXLong: _lpShare,
+            LPShareYLong: _lpShare,
+            LPShareXShort: _lpShare,
+            LPShareYShort: _lpShare
         });
 
         priceInfo = PriceInfo({
@@ -115,7 +121,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         prevPriceInfo = priceInfo;
         initiator = _initiator;
-        _mint(address(0), _share, _share, _share, _share);
+        _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
     }
 
     /// @notice Recovers tokens that are accidentally sent to the contract
