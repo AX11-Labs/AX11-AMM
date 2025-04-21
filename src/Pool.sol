@@ -17,7 +17,7 @@ import {SafeCast} from "./libraries/Math/SafeCast.sol";
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     using SafeCast for uint256;
 
-    mapping(int24 => uint256) public bins; // 128.128 fixed point
+    mapping(int24 => uint256) public bins; // value is stored as 128.128 fixed point
 
     PoolInfo private poolInfo;
     PriceInfo private priceInfo;
@@ -95,7 +95,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         }
 
         uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
-        uint256 _lpShare = _tokenShare >> 1;
+        uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
         poolInfo = PoolInfo({
             balanceXLong: 256,
@@ -114,59 +114,14 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             activeId: _activeId,
             minId: _minId,
             maxId: _maxId,
-            tickUpper: (_activeId + _maxId) >> 1, // round down
-            tickLower: (_activeId + _minId) >> 1, // round down
+            tickUpper: (_activeId + _maxId) >> 1, // midpoint,round down
+            tickLower: (_activeId + _minId) >> 1, // midpoint,round down
             fee: 30
         });
 
         prevPriceInfo = priceInfo;
         initiator = _initiator;
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
-    }
-
-    /// @notice Recovers tokens that are accidentally sent to the contract
-    /// @dev This function can only be called by the factory owner
-    ///      It calculates the excess tokens by comparing actual balance with tracked pool balance (long + short)
-    ///      The excess tokens can then be swept to a specified recipient
-    ///      This is useful for recovering tokens that are not part of the pool's managed liquidity
-    ///      Note: This function does not support fee-on-transfer tokens
-    /// @param recipient The address to receive the swept tokens
-    /// @param xOrY True for tokenX (tokenX), false for tokenY (tokenY)
-    /// @param amount The amount of tokens to sweep
-    /// @return available The amount of tokens available for sweeping after this operation
-    function sweep(address recipient, bool xOrY, uint256 amount) external override returns (uint256 available) {
-        require(msg.sender == factory, INVALID_ADDRESS());
-        address _token = xOrY ? tokenX : tokenY;
-        uint256 totalBalance =
-            xOrY ? (poolInfo.balanceXLong + poolInfo.balanceXShort) : (poolInfo.balanceYLong + poolInfo.balanceYShort);
-
-        available = IERC20(_token).balanceOf(address(this)) - totalBalance;
-        available -= amount;
-        TransferHelper.safeTransfer(_token, recipient, amount);
-    }
-
-    /// @notice Get the amount of tokens that can be swept
-    /// @return availableX The amount of tokenX that can be swept
-    /// @return availableY The amount of tokenY that can be swept
-    function getSweepable() public view returns (uint256 availableX, uint256 availableY) {
-        (uint256 totalBalanceX, uint256 totalBalanceY) =
-            ((poolInfo.balanceXLong + poolInfo.balanceXShort), (poolInfo.balanceYLong + poolInfo.balanceYShort));
-
-        availableX = IERC20(tokenX).balanceOf(address(this));
-        availableY = IERC20(tokenY).balanceOf(address(this));
-        if (availableX > totalBalanceX) {
-            availableX -= totalBalanceX;
-        } else {
-            availableX = 0;
-        }
-
-        if (availableY > totalBalanceY) {
-            availableY -= totalBalanceY;
-        } else {
-            availableY = 0;
-        }
-
-        return (availableX, availableY);
     }
 
     /// @notice EXCLUDING FEE

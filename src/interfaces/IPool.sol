@@ -49,8 +49,6 @@ interface IPool {
     function tokenX() external view returns (address);
     function tokenY() external view returns (address);
     function initiator() external view returns (address);
-    function sweep(address recipient, bool zeroOrOne, uint256 amount) external returns (uint256 available);
-    function getSweepable() external view returns (uint256 availableX, uint256 availableY);
     function getPoolInfo() external view returns (PoolInfo memory);
     function getPriceInfo() external view returns (PriceInfo memory);
     function getPrevPriceInfo() external view returns (PriceInfo memory);
