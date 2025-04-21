@@ -13,12 +13,10 @@ contract Factory is IFactory {
     uint256 public override totalPools;
     address public override feeTo;
     address public override owner;
-    address public override sweeper;
 
     constructor() {
         owner = msg.sender;
         feeTo = msg.sender;
-        sweeper = msg.sender;
     }
 
     function createPool(address tokenX, address tokenY, int24 activeId) external override returns (address pool) {
@@ -57,15 +55,5 @@ contract Factory is IFactory {
     function setFeeTo(address _feeTo) external override {
         require(msg.sender == owner, NOT_OWNER());
         feeTo = _feeTo;
-    }
-
-    function setSweeper(address _sweeper) external override {
-        require(msg.sender == owner, NOT_OWNER());
-        sweeper = _sweeper;
-    }
-
-    function poolSweep(address recipient, address pool, bool zeroOrOne, uint256 amount) external override {
-        require(msg.sender == sweeper, NOT_OWNER());
-        Pool(pool).sweep(recipient, zeroOrOne, amount);
     }
 }
