@@ -8,16 +8,16 @@ interface IPool {
     error SLIPPAGE_EXCEEDED();
 
     struct PoolInfo {
-        uint128 balanceXLong;
-        uint128 balanceYLong;
-        uint128 balanceXShort;
-        uint128 balanceYShort;
-        uint256 totalShareX; // 128.128 fixed point
-        uint256 totalShareY; // 128.128 fixed point
-        uint256 LPShareXLong; // 128.128 fixed point
-        uint256 LPShareYLong; // 128.128 fixed point
-        uint256 LPShareXShort; // 128.128 fixed point
-        uint256 LPShareYShort; // 128.128 fixed point
+        uint128 totalBalanceXLong;
+        uint128 totalBalanceYLong;
+        uint128 totalBalanceXShort;
+        uint128 totalBalanceYShort;
+        uint256 totalBinShareX; // 128.128 fixed point
+        uint256 totalBinShareY; // 128.128 fixed point
+        uint256 totalLPShareXLong; // 128.128 fixed point
+        uint256 totalLPShareYLong; // 128.128 fixed point
+        uint256 totalLPShareXShort; // 128.128 fixed point
+        uint256 totalLPShareYShort; // 128.128 fixed point
     }
 
     struct PriceInfo {
