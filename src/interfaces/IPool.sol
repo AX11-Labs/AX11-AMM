@@ -6,6 +6,7 @@ interface IPool {
     error INVALID_BIN_ID();
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
+    error INSUFFICIENT_BALANCE();
 
     struct PoolInfo {
         uint128 totalBalanceXLong;
