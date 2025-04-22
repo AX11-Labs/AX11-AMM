@@ -17,7 +17,7 @@ import {SafeCast} from "./libraries/Math/SafeCast.sol";
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
     using SafeCast for uint256;
 
-    mapping(int24 => uint256) public bins; // value is stored as 128.128 fixed point
+    mapping(int24 binId => uint256 share) public bins; // share is stored as 128.128 fixed point
 
     PoolInfo private poolInfo;
     PriceInfo private priceInfo;
@@ -98,16 +98,16 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
         poolInfo = PoolInfo({
-            balanceXLong: 256,
-            balanceYLong: 256,
-            balanceXShort: 256,
-            balanceYShort: 256,
-            totalShareX: _tokenShare,
-            totalShareY: _tokenShare,
-            LPShareXLong: _lpShare,
-            LPShareYLong: _lpShare,
-            LPShareXShort: _lpShare,
-            LPShareYShort: _lpShare
+            totalBalanceXLong: 256,
+            totalBalanceYLong: 256,
+            totalBalanceXShort: 256,
+            totalBalanceYShort: 256,
+            totalBinShareX: _tokenShare,
+            totalBinShareY: _tokenShare,
+            totalLPShareXLong: _lpShare,
+            totalLPShareYLong: _lpShare,
+            totalLPShareXShort: _lpShare,
+            totalLPShareYShort: _lpShare
         });
 
         priceInfo = PriceInfo({
@@ -122,6 +122,113 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         prevPriceInfo = priceInfo;
         initiator = _initiator;
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
+    }
+
+    function mint(LiquidityOption calldata option)
+        external
+        override
+        ensure(option.deadline)
+        nonReentrant
+        returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort)
+    {
+        require(
+            option.amountForLongX != 0 || option.amountForLongY != 0 || option.amountForShortX != 0
+                || option.amountForShortY != 0,
+            INVALID_AMOUNT()
+        ); // at least one of the amount should not be 0
+        address sender = msg.sender;
+        int24 binId = priceInfo.activeId;
+        require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
+       
+        uint256 amountX;
+        uint256 amountY;
+
+        PoolInfo storage _pool = poolInfo;
+
+        if (option.amountForLongX != 0) {
+            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _pool.totalLPShareXLong, _pool.totalBalanceXLong);
+            amountX += option.amountForLongX;
+            _pool.totalBalanceXLong += option.amountForLongX;
+            _pool.totalLPShareXLong += LPXLong;
+        }
+        if (option.amountForLongY != 0) {
+            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _pool.totalLPShareYLong, _pool.totalBalanceYLong);
+            amountY += option.amountForLongY;
+            _pool.totalBalanceYLong += option.amountForLongY;
+            _pool.totalLPShareYLong += LPYLong;
+        }
+        if (option.amountForShortX != 0) {
+            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _pool.totalLPShareXShort, _pool.totalBalanceXShort);
+            amountX += option.amountForShortX;
+            _pool.totalBalanceXShort += option.amountForShortX;
+            _pool.totalLPShareXShort += LPXShort;
+        }
+        if (option.amountForShortY != 0) {
+            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _pool.totalLPShareYShort, _pool.totalBalanceYShort);
+            amountY += option.amountForShortY;
+            _pool.totalBalanceYShort += option.amountForShortY;
+            _pool.totalLPShareYShort += LPYShort;
+        }
+
+        if (amountX != 0) TransferHelper.safeTransferFrom(tokenX, sender, address(this), amountX);
+        if (amountY != 0) TransferHelper.safeTransferFrom(tokenY, sender, address(this), amountY);
+
+        _mint(option.recipient, LPXLong, LPYLong, LPXShort, LPYShort);
+    }
+
+    function burn(LiquidityOption calldata option)
+        external
+        override
+        ensure(option.deadline)
+        nonReentrant
+        returns (uint256 amountX, uint256 amountY)
+    {
+        require(
+            option.amountForLongX != 0 || option.amountForLongY != 0 || option.amountForShortX != 0
+                || option.amountForShortY != 0,
+            INVALID_AMOUNT()
+        ); // at least one of the amount should not be 0
+        address sender = msg.sender;
+        int24 binId = priceInfo.activeId;
+        require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
+        
+        uint128 amountDeducted;
+
+        PoolInfo storage _pool = poolInfo;
+
+        if (option.amountForLongX != 0) {
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForLongX, _pool.totalBalanceXLong, _pool.totalLPShareXLong).safe128();
+            _pool.totalBalanceXLong -= amountDeducted;
+            _pool.totalLPShareXLong -= option.amountForLongX;
+            amountX += amountDeducted;
+        }
+        if (option.amountForLongY != 0) {
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForLongY, _pool.totalBalanceYLong, _pool.totalLPShareYLong).safe128();
+            _pool.totalBalanceYLong -= amountDeducted;
+            _pool.totalLPShareYLong -= option.amountForLongY;
+            amountY += amountDeducted;
+        }        
+        if (option.amountForShortX != 0) {
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForShortX, _pool.totalBalanceXShort, _pool.totalLPShareXShort).safe128();
+            _pool.totalBalanceXShort -= amountDeducted;
+            _pool.totalLPShareXShort -= option.amountForShortX;
+            amountX += amountDeducted;
+        }
+        if (option.amountForShortY != 0) {
+            amountDeducted =
+                PriceMath.fullMulDiv(option.amountForShortY, _pool.totalBalanceYShort, _pool.totalLPShareYShort).safe128();
+            _pool.totalBalanceYShort -= amountDeducted;
+            _pool.totalLPShareYShort -= option.amountForShortY;
+            amountY += amountDeducted;
+        }
+
+        _burn(sender, option.amountForLongX, option.amountForLongY, option.amountForShortX, option.amountForShortY);
+
+        if (amountX != 0) TransferHelper.safeTransfer(tokenX, sender, amountX);
+        if (amountY != 0) TransferHelper.safeTransfer(tokenY, sender, amountY);
     }
 
     /// @notice EXCLUDING FEE
@@ -271,100 +378,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         }
 
         return amountOut;
-    }
-
-    function mint(LiquidityOption calldata option)
-        external
-        override
-        ensure(option.deadline)
-        nonReentrant
-        returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort)
-    {
-        address sender = msg.sender;
-        int24 binId = priceInfo.activeId;
-        require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
-        uint256 amountX;
-        uint256 amountY;
-
-        PoolInfo storage _pool = poolInfo;
-
-        if (option.amountForLongX != 0) {
-            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _pool.LPShareXLong, _pool.balanceXLong);
-            amountX += option.amountForLongX;
-            _pool.balanceXLong += option.amountForLongX;
-            _pool.LPShareXLong += LPXLong;
-        }
-        if (option.amountForShortX != 0) {
-            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _pool.LPShareXShort, _pool.balanceXShort);
-            amountX += option.amountForShortX;
-            _pool.balanceXShort += option.amountForShortX;
-            _pool.LPShareXShort += LPXShort;
-        }
-        if (option.amountForLongY != 0) {
-            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _pool.LPShareYLong, _pool.balanceYLong);
-            amountY += option.amountForLongY;
-            _pool.balanceYLong += option.amountForLongY;
-            _pool.LPShareYLong += LPYLong;
-        }
-        if (option.amountForShortY != 0) {
-            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _pool.LPShareYShort, _pool.balanceYShort);
-            amountY += option.amountForShortY;
-            _pool.balanceYShort += option.amountForShortY;
-            _pool.LPShareYShort += LPYShort;
-        }
-
-        if (amountX != 0) TransferHelper.safeTransferFrom(tokenX, sender, address(this), amountX);
-        if (amountY != 0) TransferHelper.safeTransferFrom(tokenY, sender, address(this), amountY);
-
-        _mint(option.recipient, LPXLong, LPYLong, LPXShort, LPYShort);
-    }
-
-    function burn(LiquidityOption calldata option)
-        external
-        override
-        ensure(option.deadline)
-        nonReentrant
-        returns (uint256 amountX, uint256 amountY)
-    {
-        address sender = msg.sender;
-        PoolInfo storage _pool = poolInfo;
-        uint128 amountDeducted;
-        // Calculate amounts to withdraw based on LP shares
-        if (option.amountForLongX != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForLongX, _pool.balanceXLong, _pool.LPShareXLong).safe128();
-            _pool.balanceXLong -= amountDeducted;
-            _pool.LPShareXLong -= option.amountForLongX;
-            amountX += amountDeducted;
-        }
-        if (option.amountForShortX != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForShortX, _pool.balanceXShort, _pool.LPShareXShort).safe128();
-            _pool.balanceXShort -= amountDeducted;
-            _pool.LPShareXShort -= option.amountForShortX;
-            amountX += amountDeducted;
-        }
-        if (option.amountForLongY != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForLongY, _pool.balanceYLong, _pool.LPShareYLong).safe128();
-            _pool.balanceYLong -= amountDeducted;
-            _pool.LPShareYLong -= option.amountForLongY;
-            amountY += amountDeducted;
-        }
-        if (option.amountForShortY != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForShortY, _pool.balanceYShort, _pool.LPShareYShort).safe128();
-            _pool.balanceYShort -= amountDeducted;
-            _pool.LPShareYShort -= option.amountForShortY;
-            amountY += amountDeducted;
-        }
-
-        // Burn LP tokens
-        _burn(sender, option.amountForLongX, option.amountForLongY, option.amountForShortX, option.amountForShortY);
-
-        // Transfer tokens back to sender
-        if (amountX != 0) TransferHelper.safeTransfer(tokenX, sender, amountX);
-        if (amountY != 0) TransferHelper.safeTransfer(tokenY, sender, amountY);
     }
 
     //function flash
