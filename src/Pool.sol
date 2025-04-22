@@ -13,8 +13,10 @@ import {Uint256x256Math} from "./libraries/Math/Uint256x256Math.sol";
 import {Uint128x128Math} from "./libraries/Math/Uint128x128Math.sol";
 import {FeeTier} from "./libraries/FeeTier.sol";
 import {SafeCast} from "./libraries/Math/SafeCast.sol";
+import {NoDelegateCall} from "./abstracts/NoDelegateCall.sol";
+import {IAx11FlashCallback} from "./interfaces/IAx11FlashCallback.sol";
 
-contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
+contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
     mapping(int24 binId => uint256 share) public bins; // share is stored as 128.128 fixed point
@@ -139,7 +141,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         address sender = msg.sender;
         int24 binId = priceInfo.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
-       
+
         uint256 amountX;
         uint256 amountY;
 
@@ -191,7 +193,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         address sender = msg.sender;
         int24 binId = priceInfo.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
-        
+
         uint128 amountDeducted;
 
         PoolInfo storage _pool = poolInfo;
@@ -209,17 +211,19 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
             _pool.totalBalanceYLong -= amountDeducted;
             _pool.totalLPShareYLong -= option.amountForLongY;
             amountY += amountDeducted;
-        }        
+        }
         if (option.amountForShortX != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForShortX, _pool.totalBalanceXShort, _pool.totalLPShareXShort).safe128();
+            amountDeducted = PriceMath.fullMulDiv(
+                option.amountForShortX, _pool.totalBalanceXShort, _pool.totalLPShareXShort
+            ).safe128();
             _pool.totalBalanceXShort -= amountDeducted;
             _pool.totalLPShareXShort -= option.amountForShortX;
             amountX += amountDeducted;
         }
         if (option.amountForShortY != 0) {
-            amountDeducted =
-                PriceMath.fullMulDiv(option.amountForShortY, _pool.totalBalanceYShort, _pool.totalLPShareYShort).safe128();
+            amountDeducted = PriceMath.fullMulDiv(
+                option.amountForShortY, _pool.totalBalanceYShort, _pool.totalLPShareYShort
+            ).safe128();
             _pool.totalBalanceYShort -= amountDeducted;
             _pool.totalLPShareYShort -= option.amountForShortY;
             amountY += amountDeducted;
@@ -229,6 +233,33 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         if (amountX != 0) TransferHelper.safeTransfer(tokenX, sender, amountX);
         if (amountY != 0) TransferHelper.safeTransfer(tokenY, sender, amountY);
+    }
+
+    function flash(address recipient, address callback, uint128 amountX, uint128 amountY)
+        external
+        nonReentrant
+        noDelegateCall
+        returns (bool)
+    {
+        require(amountX != 0 && amountY != 0, INVALID_AMOUNT()); // at least one of the amount should not be 0
+        uint128 feeX = PriceMath.divUp(amountX, 10000); //0.01% fee
+        uint128 feeY = PriceMath.divUp(amountY, 10000); //0.01% fee
+        uint128 balanceXBefore = IERC20(tokenX).balanceOf(address(this));
+        uint128 balanceYBefore = IERC20(tokenY).balanceOf(address(this));
+
+        if (amountX != 0) TransferHelper.safeTransfer(tokenX, recipient, amountX);
+        if (amountY != 0) TransferHelper.safeTransfer(tokenY, recipient, amountY);
+
+        IAx11FlashCallback(callback).flashCallback(feeX, feeY);
+
+        uint128 balanceXAfter = IERC20(tokenX).balanceOf(address(this));
+        uint128 balanceYAfter = IERC20(tokenY).balanceOf(address(this));
+
+        require(
+            balanceXAfter >= balanceXBefore + feeX && balanceYAfter >= balanceYBefore + feeY, INSUFFICIENT_BALANCE()
+        );
+
+        return true;
     }
 
     /// @notice EXCLUDING FEE
@@ -247,6 +278,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
         external
         ensure(deadline)
         nonReentrant
+        noDelegateCall
         returns (uint128 amountOut)
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
@@ -379,6 +411,4 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline {
 
         return amountOut;
     }
-
-    //function flash
 }
