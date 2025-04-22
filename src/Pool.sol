@@ -131,6 +131,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         override
         ensure(option.deadline)
         nonReentrant
+        noDelegateCall
         returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort)
     {
         require(
@@ -183,6 +184,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         override
         ensure(option.deadline)
         nonReentrant
+        noDelegateCall
         returns (uint256 amountX, uint256 amountY)
     {
         require(
@@ -239,11 +241,10 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         external
         nonReentrant
         noDelegateCall
-        returns (bool)
     {
         require(amountX != 0 && amountY != 0, INVALID_AMOUNT()); // at least one of the amount should not be 0
-        uint128 feeX = PriceMath.divUp(amountX, 10000); //0.01% fee
-        uint128 feeY = PriceMath.divUp(amountY, 10000); //0.01% fee
+        uint128 feeX = PriceMath.divUp(amountX, 10000); // 0.01% fee
+        uint128 feeY = PriceMath.divUp(amountY, 10000); // 0.01% fee
         uint128 balanceXBefore = IERC20(tokenX).balanceOf(address(this));
         uint128 balanceYBefore = IERC20(tokenY).balanceOf(address(this));
 
@@ -258,8 +259,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         require(
             balanceXAfter >= balanceXBefore + feeX && balanceYAfter >= balanceYBefore + feeY, INSUFFICIENT_BALANCE()
         );
-
-        return true;
     }
 
     /// @notice EXCLUDING FEE
