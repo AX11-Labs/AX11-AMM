@@ -23,7 +23,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     PoolInfo private poolInfo;
     PriceInfo private priceInfo;
-    PriceInfo private prevPriceInfo;
     MarketBin private marketBin;
 
     address public immutable override factory;
@@ -54,10 +53,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     function getPriceInfo() public view override returns (PriceInfo memory) {
         return priceInfo;
-    }
-
-    function getPrevPriceInfo() public view override returns (PriceInfo memory) {
-        return prevPriceInfo;
     }
 
     function setInitiator(address _initiator) external override {
@@ -121,7 +116,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             fee: 30
         });
 
-        prevPriceInfo = priceInfo;
         initiator = _initiator;
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
     }
