@@ -5,8 +5,9 @@ pragma solidity 0.8.28;
 import {IFactory} from "./interfaces/IFactory.sol";
 import {Pool} from "./Pool.sol";
 import {IERC20Metadata} from "./interfaces/IERC20Metadata.sol";
+import {NoDelegateCall} from "./abstracts/NoDelegateCall.sol";
 
-contract Factory is IFactory {
+contract Factory is IFactory, NoDelegateCall {
     mapping(address tokenX => mapping(address tokenY => address pool)) public override getPool;
     mapping(address => PoolInfo) public override getTokens;
 
@@ -19,7 +20,7 @@ contract Factory is IFactory {
         feeTo = msg.sender;
     }
 
-    function createPool(address tokenX, address tokenY, int24 activeId) external override returns (address pool) {
+    function createPool(address tokenX, address tokenY, int24 activeId) external override NoDelegateCall returns (address pool) {
         if (tokenX == tokenY) {
             revert INVALID_ADDRESS();
         } else if (tokenX > tokenY) {
