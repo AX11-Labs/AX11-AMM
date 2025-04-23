@@ -23,7 +23,7 @@ contract Factory is IFactory, NoDelegateCall {
     function createPool(address tokenX, address tokenY, int24 activeId)
         external
         override
-        NoDelegateCall
+        noDelegateCall
         returns (address pool)
     {
         if (tokenX == tokenY) {
