@@ -18,7 +18,7 @@ abstract contract Ax11Lp is IAx11Lp {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Total supply of LP tokens
-    LpInfo private _totalSupply;
+    LpInfo internal _totalSupply;
 
     /// @notice Mapping of account addresses to their LP token balances
     mapping(address => LpInfo) public override balanceOf;
