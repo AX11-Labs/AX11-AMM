@@ -11,45 +11,6 @@ library Uint256x256Math {
     error Uint256x256Math__MulDivOverflow();
 
     /**
-     * @notice Calculates floor(x*y/denominator) with full precision
-     * The result will be rounded down
-     * @dev Credit to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv
-     * Requirements:
-     * - The denominator cannot be zero
-     * - The result must fit within uint256
-     * Caveats:
-     * - This function does not work with fixed-point numbers
-     * @param x The multiplicand as an uint256
-     * @param y The multiplier as an uint256
-     * @param denominator The divisor as an uint256
-     * @return result The result as an uint256
-     */
-    function mulDivRoundDown(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
-        (uint256 prod0, uint256 prod1) = _getMulProds(x, y);
-
-        return _getEndOfDivRoundDown(x, y, denominator, prod0, prod1);
-    }
-
-    /**
-     * @notice Calculates ceil(x*y/denominator) with full precision
-     * The result will be rounded up
-     * @dev Credit to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv
-     * Requirements:
-     * - The denominator cannot be zero
-     * - The result must fit within uint256
-     * Caveats:
-     * - This function does not work with fixed-point numbers
-     * @param x The multiplicand as an uint256
-     * @param y The multiplier as an uint256
-     * @param denominator The divisor as an uint256
-     * @return result The result as an uint256
-     */
-    function mulDivRoundUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
-        result = mulDivRoundDown(x, y, denominator);
-        if (mulmod(x, y, denominator) != 0) result += 1;
-    }
-
-    /**
      * @notice Calculates floor(x * y / 2**offset) with full precision
      * The result will be rounded down
      * @dev Credit to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv
