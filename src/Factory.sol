@@ -20,7 +20,12 @@ contract Factory is IFactory, NoDelegateCall {
         feeTo = msg.sender;
     }
 
-    function createPool(address tokenX, address tokenY, int24 activeId) external override NoDelegateCall returns (address pool) {
+    function createPool(address tokenX, address tokenY, int24 activeId)
+        external
+        override
+        NoDelegateCall
+        returns (address pool)
+    {
         if (tokenX == tokenY) {
             revert INVALID_ADDRESS();
         } else if (tokenX > tokenY) {
