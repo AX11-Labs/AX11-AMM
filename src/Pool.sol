@@ -21,17 +21,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     mapping(int24 binId => uint256 share) public bins; // share is stored as 128.128 fixed point
 
-    PoolInfo private poolInfo;
-    PriceInfo private priceInfo;
-    MarketBin private marketBin;
-
     address public immutable override factory;
-    address public immutable override tokenX;
-    address public immutable override tokenY;
-    address public override initiator;
 
-    int24 private constant MAX_BIN_ID = 88767;
-    int24 private constant MIN_BIN_ID = -88767;
+    int24 private constant MAX_LIMIT_BIN_ID = 88767;
+    int24 private constant MIN_LIMIT_BIN_ID = -88767;
+
+    PoolInfo private poolInfo;
 
     constructor(
         address _tokenX,
@@ -42,22 +37,16 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         string memory symbol
     ) Ax11Lp(name, symbol) {
         factory = msg.sender;
-        tokenX = _tokenX;
-        tokenY = _tokenY;
-        initialize(_activeId, _initiator);
+        initialize(_tokenX, _tokenY, _activeId, _initiator);
     }
 
     function getPoolInfo() public view override returns (PoolInfo memory) {
         return poolInfo;
     }
 
-    function getPriceInfo() public view override returns (PriceInfo memory) {
-        return priceInfo;
-    }
-
     function setInitiator(address _initiator) external override {
-        require(msg.sender == initiator, INVALID_ADDRESS());
-        initiator = _initiator;
+        require(msg.sender == poolInfo.initiator, INVALID_ADDRESS());
+        poolInfo.initiator = _initiator;
     }
 
     /// @dev equivalent to (1001>>128)/1000, which is 1.001 in 128.128 fixed point
@@ -70,17 +59,17 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     /// @param _initiator The initiator of the pool
     /// @dev we assume the amount received by the pool is ALWAYS equal to transferFrom value of 512
     /// Note: meaning that we don't support fee-on-transfer tokens
-    function initialize(int24 _activeId, address _initiator) private {
-        TransferHelper.safeTransferFrom(tokenX, _initiator, address(this), 512);
-        TransferHelper.safeTransferFrom(tokenY, _initiator, address(this), 512);
+    function initialize(address _tokenX, address _tokenY, int24 _activeId, address _initiator) private {
+        TransferHelper.safeTransferFrom(_tokenX, _initiator, address(this), 1024);
+        TransferHelper.safeTransferFrom(_tokenY, _initiator, address(this), 1024);
 
         int24 _minId = _activeId - 511;
         int24 _maxId = _activeId + 511;
-        require(_minId >= MIN_BIN_ID && _maxId <= MAX_BIN_ID, INVALID_BIN_ID());
+        require(_minId >= MIN_LIMIT_BIN_ID && _maxId <= MAX_LIMIT_BIN_ID, INVALID_BIN_ID());
 
-        marketBin = MarketBin({shareX: 1, shareY: 1});
         int24 iteration = _activeId;
-        uint256 _binShare = 1 << 128; // scaling as 128.128 fixed point
+        uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
+
         while (iteration < _maxId) {
             iteration++;
             bins[iteration] = _binShare;
@@ -91,32 +80,28 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             bins[iteration] = _binShare;
         }
 
-        uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
+        uint256 _tokenShare = 1024 << 128; // scaling as 128.128 fixed point
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
         poolInfo = PoolInfo({
-            totalBalanceXLong: 256,
-            totalBalanceYLong: 256,
-            totalBalanceXShort: 256,
-            totalBalanceYShort: 256,
+            tokenX: _tokenX,
+            tokenY: _tokenY,
+            totalBalanceXLong: 512,
+            totalBalanceYLong: 512,
+            totalBalanceXShort: 512,
+            totalBalanceYShort: 512,
             totalBinShareX: _tokenShare,
             totalBinShareY: _tokenShare,
-            totalLPShareXLong: _lpShare,
-            totalLPShareYLong: _lpShare,
-            totalLPShareXShort: _lpShare,
-            totalLPShareYShort: _lpShare
-        });
-
-        priceInfo = PriceInfo({
             activeId: _activeId,
             minId: _minId,
             maxId: _maxId,
             tickUpper: (_activeId + _maxId) >> 1, // midpoint,round down
             tickLower: (_activeId + _minId) >> 1, // midpoint,round down
-            fee: 30
+            activeBinShareX: _binShare,
+            activeBinShareY: _binShare,
+            initiator: _initiator
         });
 
-        initiator = _initiator;
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
     }
 
@@ -145,25 +130,25 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (option.amountForLongX != 0) {
             LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _pool.totalLPShareXLong, _pool.totalBalanceXLong);
             amountX += option.amountForLongX;
-            _pool.totalBalanceXLong += option.amountForLongX;
+            _pool.totalBalanceXLong += option.amountForLongX.safe128();
             _pool.totalLPShareXLong += LPXLong;
         }
         if (option.amountForLongY != 0) {
             LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _pool.totalLPShareYLong, _pool.totalBalanceYLong);
             amountY += option.amountForLongY;
-            _pool.totalBalanceYLong += option.amountForLongY;
+            _pool.totalBalanceYLong += option.amountForLongY.safe128();
             _pool.totalLPShareYLong += LPYLong;
         }
         if (option.amountForShortX != 0) {
             LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _pool.totalLPShareXShort, _pool.totalBalanceXShort);
             amountX += option.amountForShortX;
-            _pool.totalBalanceXShort += option.amountForShortX;
+            _pool.totalBalanceXShort += option.amountForShortX.safe128();
             _pool.totalLPShareXShort += LPXShort;
         }
         if (option.amountForShortY != 0) {
             LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _pool.totalLPShareYShort, _pool.totalBalanceYShort);
             amountY += option.amountForShortY;
-            _pool.totalBalanceYShort += option.amountForShortY;
+            _pool.totalBalanceYShort += option.amountForShortY.safe128();
             _pool.totalLPShareYShort += LPYShort;
         }
 
@@ -237,8 +222,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         noDelegateCall
     {
         require(amountX != 0 && amountY != 0, INVALID_AMOUNT()); // at least one of the amount should not be 0
-        uint128 feeX = PriceMath.divUp(amountX, 10000); // 0.01% fee
-        uint128 feeY = PriceMath.divUp(amountY, 10000); // 0.01% fee
+        uint128 feeX = PriceMath.divUp(amountX, 10000).safe128(); // 0.01% fee
+        uint128 feeY = PriceMath.divUp(amountY, 10000).safe128(); // 0.01% fee
         uint128 balanceXBefore = IERC20(tokenX).balanceOf(address(this)).safe128();
         uint128 balanceYBefore = IERC20(tokenY).balanceOf(address(this)).safe128();
 
@@ -403,25 +388,5 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         return amountOut;
-    }
-
-    /// @notice Sync the pool balance with the actual balance
-    function sync() external nonReentrant noDelegateCall {
-        uint128 balanceX = IERC20(tokenX).balanceOf(address(this)).safe128();
-        uint128 balanceY = IERC20(tokenY).balanceOf(address(this)).safe128();
-        
-        uint128 currentBalanceX = poolInfo.balanceXLong + poolInfo.balanceXShort;
-        uint128 currentBalanceY = poolInfo.balanceYLong + poolInfo.balanceYShort;
-        
-        if (currentBalanceX != balanceX) {
-            uint128 balanceXLong = PriceMath.fullMulDiv(balanceX, poolInfo.balanceXLong, currentBalanceX).safe128();
-            poolInfo.balanceXLong = balanceXLong;
-            poolInfo.balanceXShort = balanceX - balanceXLong;
-        }
-        if (currentBalanceY != balanceY) {
-            uint128 balanceYLong = PriceMath.fullMulDiv(balanceY, poolInfo.balanceYLong, currentBalanceY).safe128();
-            poolInfo.balanceYLong = balanceYLong;
-            poolInfo.balanceYShort = balanceY - balanceYLong;
-        }
     }
 }
