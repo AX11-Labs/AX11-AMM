@@ -223,22 +223,25 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         nonReentrant
         noDelegateCall
     {
+        PoolInfo storage _pool = poolInfo;
         require(amountX != 0 && amountY != 0, INVALID_AMOUNT()); // at least one of the amount should not be 0
+
+        uint128 balanceXBefore = IERC20(_pool.tokenX).balanceOf(address(this)).safe128();
+        uint128 balanceYBefore = IERC20(_pool.tokenY).balanceOf(address(this)).safe128();
+
+        if (amountX != 0) TransferHelper.safeTransfer(_pool.tokenX, recipient, amountX);
+        if (amountY != 0) TransferHelper.safeTransfer(_pool.tokenY, recipient, amountY);
+
         uint128 feeX = PriceMath.divUp(amountX, 10000).safe128(); // 0.01% fee
         uint128 feeY = PriceMath.divUp(amountY, 10000).safe128(); // 0.01% fee
-        uint128 balanceXBefore = IERC20(tokenX).balanceOf(address(this)).safe128();
-        uint128 balanceYBefore = IERC20(tokenY).balanceOf(address(this)).safe128();
-
-        if (amountX != 0) TransferHelper.safeTransfer(tokenX, recipient, amountX);
-        if (amountY != 0) TransferHelper.safeTransfer(tokenY, recipient, amountY);
 
         IAx11FlashCallback(callback).flashCallback(feeX, feeY);
 
-        uint128 balanceXAfter = IERC20(tokenX).balanceOf(address(this)).safe128();
-        uint128 balanceYAfter = IERC20(tokenY).balanceOf(address(this)).safe128();
+        uint128 balanceXAfter = IERC20(_pool.tokenX).balanceOf(address(this)).safe128();
+        uint128 balanceYAfter = IERC20(_pool.tokenY).balanceOf(address(this)).safe128();
 
         require(
-            balanceXAfter >= balanceXBefore + feeX && balanceYAfter >= balanceYBefore + feeY, INSUFFICIENT_BALANCE()
+            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY), INSUFFICIENT_BALANCE()
         );
     }
 
