@@ -22,12 +22,6 @@ interface IPool {
         // total bin share
         uint256 totalBinShareX; // 128.128 fixed point
         uint256 totalBinShareY; // 128.128 fixed point
-        // total LP share
-        // we can read from AX11Lp.totalSupply()
-        //uint256 totalLPShareXLong; // 128.128 fixed point
-        //uint256 totalLPShareYLong; // 128.128 fixed point
-        //uint256 totalLPShareXShort; // 128.128 fixed point
-        //uint256 totalLPShareYShort; // 128.128 fixed point
         // price info
         int24 activeId;
         int24 minId;
@@ -36,11 +30,10 @@ interface IPool {
         int24 tickYUpper;
         int24 tickXLower;
         int24 tickYLower;
-        //uint8 fee; // we can just get from FeeTier.sol
         // market bin share
         uint256 activeBinShareX; //128.128 fixed point
         uint256 activeBinShareY; //128.128 fixed point
-        // initiator
+        // pool initiator
         address initiator;
     }
 
