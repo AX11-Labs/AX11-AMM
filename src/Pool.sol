@@ -311,7 +311,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             totalBinShareIn += binShareInGain; // update total bin share
             totalBinShareOut -= usedBinShareOut; // update total bin share
 
-            if (amountIn == 0) break; // delete bins[binId] is not necessary and is harmless
+            if (amountIn == 0) break; // delete bins[binId] is not necessary 
+            // because if we pass the bin, it will set the new value in the next line
+            // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y
 
             bins[binId] = binShareIn; // add to new bin
             binId = xInYOut ? binId + 1 : binId - 1;
