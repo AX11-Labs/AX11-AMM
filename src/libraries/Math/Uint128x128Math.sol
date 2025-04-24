@@ -2,16 +2,13 @@
 pragma solidity 0.8.28;
 
 import {Constants} from "../Constants.sol";
-import {BitMath} from "./BitMath.sol";
-
 /**
  * @title Uint128x128 Math Library derived from Trader Joe's Uint128x128Math
  * @author Trader Joe
  * @notice Helper contract used for power calculations
  */
-library Uint128x128Math {
-    using BitMath for uint256;
 
+library Uint128x128Math {
     error Uint128x128Math__PowUnderflow(uint256 x, int256 y);
 
     /**
