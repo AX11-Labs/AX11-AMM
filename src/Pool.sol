@@ -23,9 +23,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     address public immutable override factory;
 
-    int24 private constant MAX_LIMIT_BIN_ID = 88767;
-    int24 private constant MIN_LIMIT_BIN_ID = -88767;
-
     PoolInfo private poolInfo;
 
     constructor(
@@ -49,6 +46,10 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo.initiator = _initiator;
     }
 
+    function checkBinIdLimit(int24 value) private pure {
+        require(value >= -88767 && value <= 88767, INVALID_BIN_ID());
+    }
+
     /// @dev equivalent to (1001>>128)/1000, which is 1.001 in 128.128 fixed point
     function getBase() private pure returns (uint256) {
         return 340622649287859401926837982039199979667;
@@ -65,8 +66,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         int24 _minId = _activeId - 511;
         int24 _maxId = _activeId + 511;
-        require(_minId >= MIN_LIMIT_BIN_ID && _maxId <= MAX_LIMIT_BIN_ID, INVALID_BIN_ID());
-
+        checkBinIdLimit(_minId);
+        checkBinIdLimit(_maxId);
         int24 iteration = _activeId;
         uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
 
@@ -270,6 +271,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 totalBalX = _pool.totalBalanceXLong + _pool.totalBalanceXShort;
         uint256 totalBalY = _pool.totalBalanceYLong + _pool.totalBalanceYShort;
         int24 binId = _pool.activeId;
+        int24 startingBinId = binId;
 
         (address tokenIn, address tokenOut) = xInYOut ? (_pool.tokenX, _pool.tokenY) : (_pool.tokenY, _pool.tokenX);
         (uint256 totalBalIn, uint256 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
@@ -280,37 +282,45 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
-        uint256 binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
-        uint256 maxAmountIn = _getAmountInFromBin(xInYOut, binId, binAmountOut);
+        uint256 binAmountOut;
+        uint256 maxAmountIn;
+        uint256 usedBinShareOut;
 
-        // --- activeBin ---> this portion can be included in the loop!!!!!!!!!!!!!!!!!!!!!
         while (true) {
+            binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+            maxAmountIn = _getAmountInFromBin(xInYOut, binId, binAmountOut);
             /// @dev update bin share within the loop
             if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
                 amountOut += binAmountOut;
                 totalBalOut -= binAmountOut; // update total balance out
+                usedBinShareOut = binShareOut;
             } else {
                 uint256 usedAmountOut = PriceMath.fullMulDiv(amountIn, binAmountOut, maxAmountIn);
-                amountIn = 0;
+                require(usedAmountOut != 0, TRADE_SIZE_TOO_SMALL());
                 amountOut += usedAmountOut;
                 totalBalOut -= usedAmountOut; // update total balance out
-                binShareOut = PriceMath.fullMulDiv(usedAmountOut, binShareOut, binAmountOut);
+                usedBinShareOut = PriceMath.fullMulDiv(usedAmountOut, binShareOut, binAmountOut);
+                binShareOut -= usedBinShareOut;
                 maxAmountIn = amountIn;
+                amountIn = 0;
             }
             totalBalIn += maxAmountIn; // update total balance in
-            binShareIn += PriceMath.fullMulDiv(maxAmountIn, totalBinShareIn, totalBalIn);
-            totalBinShareIn += binShareIn; // update total bin share
-            totalBinShareOut -= binShareOut; // update total bin share
-            bins[binId] = binShareIn; // add to new bin
+            uint256 binShareInGain = PriceMath.fullMulDiv(maxAmountIn, totalBinShareIn, totalBalIn);
+            binShareIn += binShareInGain;
+            totalBinShareIn += binShareInGain; // update total bin share
+            totalBinShareOut -= usedBinShareOut; // update total bin share
 
-            if (amountIn == 0) break;
+            if (amountIn == 0) break; // delete bins[binId] is not necessary and is harmless
+
+            bins[binId] = binShareIn; // add to new bin
             binId = xInYOut ? binId + 1 : binId - 1;
-            require(binId >= MIN_LIMIT_BIN_ID && binId <= MAX_LIMIT_BIN_ID, INVALID_BIN_ID());
-            // reset values here, if necessary
-            // ...
-            //...
+            checkBinIdLimit(binId);
+            binShareIn = 0;
+            binShareOut = bins[binId];
         }
+
+        require(totalBalIn >= 1024 && totalBalOut >= 1024, MINIMUM_LIQUIDITY_EXCEEDED());
 
         uint256 totalBalXLong;
         uint256 totalBalXShort;
@@ -338,8 +348,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         _pool.activeBinShareX = xInYOut ? binShareIn : binShareOut;
         _pool.activeBinShareY = xInYOut ? binShareOut : binShareIn;
         _pool.activeId = binId;
-        /// should also update priceInfo here ...............
-        // also dont forget to incorporate fee into calculation, short and long balance must change
+        /// TODO: should also update priceInfo here ...............
+        // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
 
         if (amountOut >= minAmountOut) {
             TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
@@ -347,6 +357,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             revert SLIPPAGE_EXCEEDED();
         }
 
-        return amountOut;
-        //uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
+        //TODO: uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
+    }
 }
