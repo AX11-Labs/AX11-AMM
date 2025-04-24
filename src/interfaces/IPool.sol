@@ -7,6 +7,8 @@ interface IPool {
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
     error INSUFFICIENT_BALANCE();
+    error TRADE_SIZE_TOO_SMALL();
+    error MINIMUM_LIQUIDITY_EXCEEDED();
 
     // ---------- Storage struct ----------
 
