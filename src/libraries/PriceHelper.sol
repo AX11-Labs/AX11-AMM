@@ -17,6 +17,7 @@ library PriceHelper {
      * @param price The price with 18 decimals
      * @return price128x128 The 128.128-binary fixed-point number
      */
+
     function convertDecimalPriceTo128x128(uint256 price) internal pure returns (uint256) {
         return price.shiftDivRoundDown(Constants.SCALE_OFFSET, Constants.PRECISION);
     }
