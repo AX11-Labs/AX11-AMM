@@ -14,6 +14,8 @@ interface IPool {
         // token info
         address tokenX;
         address tokenY;
+        // pool initiator
+        address initiator;
         // total balance
         uint128 totalBalanceXLong;
         uint128 totalBalanceYLong;
@@ -33,8 +35,6 @@ interface IPool {
         // market bin share
         uint256 activeBinShareX; //128.128 fixed point
         uint256 activeBinShareY; //128.128 fixed point
-        // pool initiator
-        address initiator;
     }
 
     // ---------- Function input struct ----------
