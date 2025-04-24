@@ -86,6 +86,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo = PoolInfo({
             tokenX: _tokenX,
             tokenY: _tokenY,
+            initiator: _initiator,
             totalBalanceXLong: 512,
             totalBalanceYLong: 512,
             totalBalanceXShort: 512,
@@ -98,8 +99,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             tickUpper: (_activeId + _maxId) >> 1, // midpoint,round down
             tickLower: (_activeId + _minId) >> 1, // midpoint,round down
             activeBinShareX: _binShare,
-            activeBinShareY: _binShare,
-            initiator: _initiator
+            activeBinShareY: _binShare
         });
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
@@ -265,126 +265,81 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint128 amountOut)
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
-        uint128 totalBalX = poolInfo.balanceXLong + poolInfo.balanceXShort;
-        uint128 totalBalY = poolInfo.balanceYLong + poolInfo.balanceYShort;
+        PoolInfo storage _pool = poolInfo;
 
-        (address tokenIn, address tokenOut) = xInYOut ? (tokenX, tokenY) : (tokenY, tokenX);
+        uint256 totalBalX = _pool.totalBalanceXLong + _pool.totalBalanceXShort;
+        uint256 totalBalY = _pool.totalBalanceYLong + _pool.totalBalanceYShort;
+        int24 binId = _pool.activeId;
+
+        (address tokenIn, address tokenOut) = xInYOut ? (_pool.tokenX, _pool.tokenY) : (_pool.tokenY, _pool.tokenX);
+        (uint256 totalBalIn, uint256 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
+        (uint256 binShareIn, uint256 binShareOut) =
+            xInYOut ? (_pool.activeBinShareX, _pool.activeBinShareY) : (_pool.activeBinShareY, _pool.activeBinShareX);
+        (uint256 totalBinShareIn, uint256 totalBinShareOut) =
+            xInYOut ? (_pool.totalBinShareX, _pool.totalBinShareY) : (_pool.totalBinShareY, _pool.totalBinShareX);
+
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
-        PoolInfo storage _pool = poolInfo;
-        PriceInfo storage _priceInfo = priceInfo;
+        uint256 binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+        uint256 maxAmountIn = _getAmountInFromBin(xInYOut, binId, binAmountOut);
 
-        int24 binId = _priceInfo.activeId;
-
-        (uint128 totalBalIn, uint128 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
-
-        uint128 binBalanceIn;
-        uint128 binBalanceOut;
-        uint128 maxAmountIn;
-
+        // --- activeBin ---> this portion can be included in the loop!!!!!!!!!!!!!!!!!!!!!
         while (true) {
-            BinInfo storage _bin = bins[binId];
-            (binBalanceIn, binBalanceOut) = xInYOut ? (_bin.balanceX, _bin.balanceY) : (_bin.balanceY, _bin.balanceX);
-
-            (maxAmountIn) = _getAmountInFromBin(xInYOut, binId, binBalanceOut).safe128();
-
+            /// @dev update bin share within the loop
             if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
-                amountOut += binBalanceOut;
-                totalBalOut -= binBalanceOut;
-                binBalanceOut = 0;
+                amountOut += binAmountOut;
+                totalBalOut -= binAmountOut; // update total balance out
             } else {
-                uint128 useAmountOut = (PriceMath.fullMulDiv(amountIn, binBalanceOut, maxAmountIn)).safe128(); // won't overlow as remainingAmount < balIn
-                amountOut += useAmountOut;
-                binBalanceOut -= useAmountOut;
-                totalBalOut -= useAmountOut;
-                maxAmountIn = amountIn;
+                uint256 usedAmountOut = PriceMath.fullMulDiv(amountIn, binAmountOut, maxAmountIn);
                 amountIn = 0;
+                amountOut += usedAmountOut;
+                totalBalOut -= usedAmountOut; // update total balance out
+                binShareOut = PriceMath.fullMulDiv(usedAmountOut, binShareOut, binAmountOut);
+                maxAmountIn = amountIn;
             }
-
-            // Unified share calculation and update
-            binBalanceIn += maxAmountIn;
-            totalBalIn += maxAmountIn;
-
-            _bin.balanceX = xInYOut ? binBalanceIn : binBalanceOut;
-            _bin.balanceY = xInYOut ? binBalanceOut : binBalanceIn;
+            totalBalIn += maxAmountIn; // update total balance in
+            binShareIn += PriceMath.fullMulDiv(maxAmountIn, totalBinShareIn, totalBalIn);
+            totalBinShareIn += binShareIn; // update total bin share
+            totalBinShareOut -= binShareOut; // update total bin share
+            bins[binId] = binShareIn; // add to new bin
 
             if (amountIn == 0) break;
-            // bool crossTick;
-            // if (xInYOut) {
-            //     require(binId > MIN_BIN_ID, INVALID_BIN_ID());
-            //     binId--;
-            //     if (binId < _pool.tickLower) {
-            //         crossTick = true;
-            //     }
-            // } else {
-            //     require(binId < MAX_BIN_ID, INVALID_BIN_ID());
-            //     binId++;
-            //     if (binId > _pool.tickUpper) {
-            //         crossTick = true;
-            //     }
-            // }
-
-            // if (crossTick) {
-            //     //activate ALC expansion here
-            // }
-            // crossTick = false;
+            binId = xInYOut ? binId + 1 : binId - 1;
+            require(binId >= MIN_LIMIT_BIN_ID && binId <= MAX_LIMIT_BIN_ID, INVALID_BIN_ID());
+            // reset values here, if necessary
+            // ...
+            //...
         }
 
-        uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
-        uint128 fee = FeeTier.getFee(range, amountOut);
-        uint128 feeInAmountIn = FeeTier.getFee(range, amountIn);
-
-        uint128 newBalXLong;
-        uint128 newBalYLong;
-        uint128 newBalXShort;
-        uint128 newBalYShort;
-
+        uint256 totalBalXLong;
+        uint256 totalBalXShort;
+        uint256 totalBalYLong;
+        uint256 totalBalYShort;
+        /// @dev update pool storage after the loop
         if (xInYOut) {
-            newBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceXLong, totalBalX).safe128();
-            newBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceYLong, totalBalY).safe128();
-            newBalXShort = totalBalIn - newBalXLong;
-            newBalYShort = totalBalOut - newBalYLong;
-
-            if (newBalYShort + fee >= range) {
-                // ensure sufficient liquidity
-                newBalYShort -= fee;
-                newBalYLong += fee;
-            }
-            newBalYLong += fee; // twice
-
-            if (newBalXLong + fee >= range) {
-                // ensure sufficient liquidity
-                newBalXLong -= feeInAmountIn;
-                newBalXShort += feeInAmountIn;
-            }
+            totalBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.totalBalanceXLong, totalBalX);
+            totalBalXShort = totalBalIn - totalBalXLong;
+            totalBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.totalBalanceYLong, totalBalY);
+            totalBalYShort = totalBalOut - totalBalYLong;
         } else {
-            newBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.balanceXLong, totalBalX).safe128();
-            newBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.balanceYLong, totalBalY).safe128();
-            newBalXShort = totalBalOut - newBalXLong;
-            newBalYShort = totalBalIn - newBalYLong;
-
-            if (newBalXShort + fee >= range) {
-                // ensure sufficient liquidity
-                newBalXShort -= fee;
-                newBalXLong += fee;
-            }
-            newBalXLong += fee; // twice
-
-            if (newBalYLong + fee >= range) {
-                // ensure sufficient liquidity
-                newBalYLong -= feeInAmountIn;
-                newBalYShort += feeInAmountIn;
-            }
+            totalBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.totalBalanceYLong, totalBalY);
+            totalBalYShort = totalBalIn - totalBalYLong;
+            totalBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.totalBalanceXLong, totalBalX);
+            totalBalXShort = totalBalOut - totalBalXLong;
         }
 
-        _pool.balanceXLong = newBalXLong;
-        _pool.balanceYLong = newBalYLong;
-        _pool.balanceXShort = newBalXShort;
-        _pool.balanceYShort = newBalYShort;
-
-        _priceInfo.activeId = binId;
-        amountOut -= fee;
+        _pool.totalBalanceXLong = totalBalXLong.safe128();
+        _pool.totalBalanceYLong = totalBalYLong.safe128();
+        _pool.totalBalanceXShort = totalBalXShort.safe128();
+        _pool.totalBalanceYShort = totalBalYShort.safe128();
+        _pool.totalBinShareX = xInYOut ? totalBinShareIn : totalBinShareOut;
+        _pool.totalBinShareY = xInYOut ? totalBinShareOut : totalBinShareIn;
+        _pool.activeBinShareX = xInYOut ? binShareIn : binShareOut;
+        _pool.activeBinShareY = xInYOut ? binShareOut : binShareIn;
+        _pool.activeId = binId;
+        /// should also update priceInfo here ...............
+        // also dont forget to incorporate fee into calculation, short and long balance must change
 
         if (amountOut >= minAmountOut) {
             TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
@@ -393,5 +348,5 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         return amountOut;
-    }
+        //uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
 }
