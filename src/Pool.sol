@@ -237,30 +237,53 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (amountY != 0) TransferHelper.safeTransfer(_pool.tokenY, sender, amountY);
     }
 
-    function flash(address recipient, address callback, uint128 amountX, uint128 amountY)
+
+    /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
+    /// The prevention is implemented in the swap and burn function, disallowing complete depletion of liquidity
+    function flash(address recipient, address callback, uint256 amountX, uint256 amountY)
         external
         nonReentrant
         noDelegateCall
     {
         PoolInfo storage _pool = poolInfo;
-        require(amountX != 0 && amountY != 0, INVALID_AMOUNT()); // at least one of the amount should not be 0
 
-        uint128 balanceXBefore = IERC20(_pool.tokenX).balanceOf(address(this)).safe128();
-        uint128 balanceYBefore = IERC20(_pool.tokenY).balanceOf(address(this)).safe128();
+        uint256 balanceXBefore;
+        uint256 balanceYBefore;
+        uint256 feeX;
+        uint256 feeY;
+        uint256 balanceXAfter;
+        uint256 balanceYAfter;
 
-        if (amountX != 0) TransferHelper.safeTransfer(_pool.tokenX, recipient, amountX);
-        if (amountY != 0) TransferHelper.safeTransfer(_pool.tokenY, recipient, amountY);
-
-        uint128 feeX = PriceMath.divUp(amountX, 10000).safe128(); // 0.01% fee
-        uint128 feeY = PriceMath.divUp(amountY, 10000).safe128(); // 0.01% fee
+        if (amountX != 0) {
+            balanceXBefore = IERC20(_pool.tokenX).balanceOf(address(this));
+            feeX = PriceMath.divUp(amountX, 10000); // 0.01% fee
+            TransferHelper.safeTransfer(_pool.tokenX, recipient, amountX);
+        }
+        if (amountY != 0) {
+            balanceYBefore = IERC20(_pool.tokenY).balanceOf(address(this));
+            feeY = PriceMath.divUp(amountY, 10000); // 0.01% fee
+            TransferHelper.safeTransfer(_pool.tokenY, recipient, amountY);
+        }
 
         IAx11FlashCallback(callback).flashCallback(feeX, feeY);
 
-        uint128 balanceXAfter = IERC20(_pool.tokenX).balanceOf(address(this)).safe128();
-        uint128 balanceYAfter = IERC20(_pool.tokenY).balanceOf(address(this)).safe128();
+        if (amountX != 0) {
+            balanceXAfter = IERC20(_pool.tokenX).balanceOf(address(this));
+            uint256 totalBalXLong = PriceMath.fullMulDiv(balanceXAfter, _pool.totalBalanceXLong, balanceXBefore); // assume balanceXBefore != 0
+            uint256 totalBalXShort = balanceXAfter - totalBalXLong;
+            _pool.totalBalanceXLong = totalBalXLong.safe128();
+            _pool.totalBalanceXShort = totalBalXShort.safe128();
+        }
+        if (amountY != 0) {
+            balanceYAfter = IERC20(_pool.tokenY).balanceOf(address(this));
+            uint256 totalBalYLong = PriceMath.fullMulDiv(balanceYAfter, _pool.totalBalanceYLong, balanceYBefore); // assume balanceYBefore != 0
+            uint256 totalBalYShort = balanceYAfter - totalBalYLong;
+            _pool.totalBalanceYLong = totalBalYLong.safe128();
+            _pool.totalBalanceYShort = totalBalYShort.safe128();
+        }
 
         require(
-            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY), INSUFFICIENT_BALANCE()
+            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY), FLASH_INSUFFICIENT_BALANCE()
         );
     }
 
