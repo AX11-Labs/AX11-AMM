@@ -60,11 +60,29 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     function _getAmountInFromBin(bool xInYOut, int24 binId, uint256 balance)
         private
         pure
-        returns (uint256 maxAmountIn)
+        returns (uint256 maxAmountIn, uint256 price)
     {
+        price = Uint128x128Math.pow(getBase(), binId);
         maxAmountIn = xInYOut
-            ? Uint256x256Math.shiftDivRoundUp(balance, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
-            : Uint256x256Math.mulShiftRoundUp(balance, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
+            ? Uint256x256Math.shiftDivRoundUp(balance, 128, price) // getBase().pow(binId) = price128.128
+            : Uint256x256Math.mulShiftRoundUp(balance, price, 128); // getBase().pow(binId) = price128.128
+    }
+
+    /// @notice This function is used to calculate the amountIn for the next bin
+    /// the previous price should be dervied from `_getAmountInFromBin`
+    /// this will save gas by not calculating the price with pow() again
+    function _getAmountInFromNextBin(bool xInYOut, uint256 previousPrice, uint256 balance)
+        private
+        pure
+        returns (uint256 maxAmountIn, uint256 price)
+    {
+        if (xInYOut) {
+            price = ((previousPrice * 1001) / 1000);
+            maxAmountIn = Uint256x256Math.shiftDivRoundUp(balance, 128, price);
+        } else {
+            price = ((previousPrice * 1000) / 1001);
+            maxAmountIn = Uint256x256Math.mulShiftRoundUp(balance, price, 128);
+        }
     }
 
     /// @notice Initialize the pool
@@ -322,13 +340,11 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
-        uint256 binAmountOut;
-        uint256 maxAmountIn;
+        uint256 binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+        (uint256 maxAmountIn, uint256 price) = _getAmountInFromBin(xInYOut, binId, binAmountOut);
         uint256 usedBinShareOut;
 
         while (true) {
-            binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
-            maxAmountIn = _getAmountInFromBin(xInYOut, binId, binAmountOut);
             /// @dev update bin share within the loop
             if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
@@ -361,6 +377,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             checkBinIdLimit(binId);
             binShareIn = 0;
             binShareOut = bins[binId];
+
+            binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+            (maxAmountIn, price) = _getAmountInFromNextBin(xInYOut, price, binAmountOut);
         }
 
         uint256 totalBalXLong;
@@ -395,13 +414,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         _pool.activeBinShareX = xInYOut ? binShareIn : binShareOut;
         _pool.activeBinShareY = xInYOut ? binShareOut : binShareIn;
         _pool.activeId = binId;
-    
+
         /// TODO: should also update priceInfo here ...............
         // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
 
-        require (amountOut >= minAmountOut,SLIPPAGE_EXCEEDED()); 
+        require(amountOut >= minAmountOut, SLIPPAGE_EXCEEDED());
         TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
-      
 
         //TODO: uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
     }
