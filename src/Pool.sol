@@ -54,6 +54,18 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     function getBase() private pure returns (uint256) {
         return 340622649287859401926837982039199979667;
     }
+    /// @notice EXCLUDING FEE
+    /// @notice This is only for calculating the amountIn within a single bin.
+
+    function _getAmountInFromBin(bool xInYOut, int24 binId, uint256 balance)
+        private
+        pure
+        returns (uint256 maxAmountIn)
+    {
+        maxAmountIn = xInYOut
+            ? Uint256x256Math.shiftDivRoundUp(balance, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
+            : Uint256x256Math.mulShiftRoundUp(balance, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
+    }
 
     /// @notice Initialize the pool
     /// @param _activeId The active bin id
@@ -237,7 +249,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (amountY != 0) TransferHelper.safeTransfer(_pool.tokenY, sender, amountY);
     }
 
-
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
     /// The prevention is implemented in the swap and burn function, disallowing complete depletion of liquidity
     function flash(address recipient, address callback, uint256 amountX, uint256 amountY)
@@ -283,20 +294,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         require(
-            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY), FLASH_INSUFFICIENT_BALANCE()
+            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY),
+            FLASH_INSUFFICIENT_BALANCE()
         );
-    }
-
-    /// @notice EXCLUDING FEE
-    /// @notice This is only for calculating the amountIn within a single bin.
-    function _getAmountInFromBin(bool xInYOut, int24 binId, uint256 balance)
-        private
-        pure
-        returns (uint256 maxAmountIn)
-    {
-        maxAmountIn = xInYOut
-            ? Uint256x256Math.shiftDivRoundUp(balance, 128, Uint128x128Math.pow(getBase(), binId)) // getBase().pow(binId) = price128.128
-            : Uint256x256Math.mulShiftRoundUp(balance, Uint128x128Math.pow(getBase(), binId), 128); // getBase().pow(binId) = price128.128
     }
 
     function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
@@ -335,6 +335,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                 amountOut += binAmountOut;
                 totalBalOut -= binAmountOut; // update total balance out
                 usedBinShareOut = binShareOut;
+                binShareOut = 0;
             } else {
                 uint256 usedAmountOut = PriceMath.fullMulDiv(amountIn, binAmountOut, maxAmountIn);
                 require(usedAmountOut != 0, TRADE_SIZE_TOO_SMALL());
@@ -394,14 +395,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         _pool.activeBinShareX = xInYOut ? binShareIn : binShareOut;
         _pool.activeBinShareY = xInYOut ? binShareOut : binShareIn;
         _pool.activeId = binId;
+    
         /// TODO: should also update priceInfo here ...............
         // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
 
-        if (amountOut >= minAmountOut) {
-            TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
-        } else {
-            revert SLIPPAGE_EXCEEDED();
-        }
+        require (amountOut >= minAmountOut,SLIPPAGE_EXCEEDED()); 
+        TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
+      
 
         //TODO: uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
     }
