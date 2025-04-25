@@ -26,7 +26,7 @@ interface IPool {
         // total bin share
         uint256 totalBinShareX; // 128.128 fixed point
         uint256 totalBinShareY; // 128.128 fixed point
-            // market bin share
+        // market bin share
         uint256 activeBinShareX; //128.128 fixed point
         uint256 activeBinShareY; //128.128 fixed point
         // price info
