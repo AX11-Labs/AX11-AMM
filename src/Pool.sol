@@ -184,37 +184,52 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 binId = _pool.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
+        uint256 balXLong = _pool.totalBalanceXLong;
+        uint256 balYLong = _pool.totalBalanceYLong;
+        uint256 balXShort = _pool.totalBalanceXShort;
+        uint256 balYShort = _pool.totalBalanceYShort;
+
+        uint256 totalBalX = balXLong + balXShort;
+        uint256 totalBalY = balYLong + balYShort;
+
         uint256 amountDeducted;
-        uint256 bal;
 
         if (option.amountForLongX != 0) {
-            bal = _pool.totalBalanceXLong;
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, bal, _lpInfo.longX); // assume bal != 0
-            bal -= amountDeducted;
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, _lpInfo.longX);
+            balXLong -= amountDeducted;
             amountX += amountDeducted;
-            _pool.totalBalanceXLong = bal.safe128();
+            require(balXLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            _pool.totalBalanceXLong = balXLong.safe128();
         }
         if (option.amountForLongY != 0) {
-            bal = _pool.totalBalanceYLong;
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, bal, _lpInfo.longY); // assume bal != 0
-            bal -= amountDeducted;
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, _lpInfo.longY);
+            balYLong -= amountDeducted;
             amountY += amountDeducted;
-            _pool.totalBalanceYLong = bal.safe128();
+            require(balYLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            _pool.totalBalanceYLong = balYLong.safe128();
         }
         if (option.amountForShortX != 0) {
-            bal = _pool.totalBalanceXShort;
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, bal, _lpInfo.shortX); // assume bal != 0
-            bal -= amountDeducted;
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, _lpInfo.shortX);
+            balXShort -= amountDeducted;
             amountX += amountDeducted;
-            _pool.totalBalanceXShort = bal.safe128();
+            require(balXShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            _pool.totalBalanceXShort = balXShort.safe128();
         }
         if (option.amountForShortY != 0) {
-            bal = _pool.totalBalanceYShort;
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, bal, _lpInfo.shortY); // assume bal != 0
-            bal -= amountDeducted;
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, _lpInfo.shortY);
+            balYShort -= amountDeducted;
             amountY += amountDeducted;
-            _pool.totalBalanceYShort = bal.safe128();
+            require(balYShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            _pool.totalBalanceYShort = balYShort.safe128();
         }
+
+        totalBalX -= amountX;
+        totalBalY -= amountY;
+
+        if (totalBalX < 1024) amountX -= (1024 - totalBalX);
+        if (totalBalY < 1024) amountY -= (1024 - totalBalY);
+        /// @dev if a user's share is too large that it covers almost the entire pool, they need to leave the minimum liquidity in the pool.
+        /// so they may be able to withdraw 99.999xxx% of their funds.
 
         _burn(sender, option.amountForLongX, option.amountForLongY, option.amountForShortX, option.amountForShortY);
 
