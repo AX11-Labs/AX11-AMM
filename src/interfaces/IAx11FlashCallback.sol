@@ -8,5 +8,5 @@ interface IAx11FlashCallback {
     /// @notice Callback function interface for flashloan implementation, required to payback the borrowed funds within this function
     /// @param feeX The fee amount in tokenX
     /// @param feeY The fee amount in tokenY
-    function flashCallback(uint128 feeX, uint128 feeY) external;
+    function flashCallback(uint256 feeX, uint256 feeY) external;
 }
