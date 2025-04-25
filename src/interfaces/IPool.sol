@@ -26,6 +26,9 @@ interface IPool {
         // total bin share
         uint256 totalBinShareX; // 128.128 fixed point
         uint256 totalBinShareY; // 128.128 fixed point
+            // market bin share
+        uint256 activeBinShareX; //128.128 fixed point
+        uint256 activeBinShareY; //128.128 fixed point
         // price info
         int24 activeId;
         int24 minId;
@@ -34,9 +37,6 @@ interface IPool {
         int24 tickYUpper;
         int24 tickXLower;
         int24 tickYLower;
-        // market bin share
-        uint256 activeBinShareX; //128.128 fixed point
-        uint256 activeBinShareY; //128.128 fixed point
     }
 
     // ---------- Function input struct ----------

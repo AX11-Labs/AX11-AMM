@@ -97,15 +97,15 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             totalBalanceYShort: 512,
             totalBinShareX: _tokenShare,
             totalBinShareY: _tokenShare,
+            activeBinShareX: _binShare,
+            activeBinShareY: _binShare,
             activeId: _activeId,
             minId: _minId,
             maxId: _maxId,
             tickXUpper: tickX, // midpoint,round down
             tickYUpper: tickY, // midpoint,round down
             tickXLower: (_activeId + tickX) >> 1, // midpoint,round down
-            tickYLower: (_activeId + tickY) >> 1, // midpoint,round down
-            activeBinShareX: _binShare,
-            activeBinShareY: _binShare
+            tickYLower: (_activeId + tickY) >> 1 // midpoint,round down
         });
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
