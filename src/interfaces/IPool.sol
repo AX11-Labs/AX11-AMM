@@ -31,8 +31,8 @@ interface IPool {
         uint256 activeBinShareY; //128.128 fixed point
         // price info
         int24 activeId;
-        int24 minId;
-        int24 maxId;
+        int24 lowestId;
+        int24 highestId;
         int24 tickXUpper;
         int24 tickYUpper;
         int24 tickXLower;

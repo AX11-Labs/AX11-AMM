@@ -94,19 +94,19 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         TransferHelper.safeTransferFrom(_tokenX, _initiator, address(this), 1024);
         TransferHelper.safeTransferFrom(_tokenY, _initiator, address(this), 1024);
 
-        int24 _minId = _activeId - 511;
-        int24 _maxId = _activeId + 511;
-        checkBinIdLimit(_minId);
-        checkBinIdLimit(_maxId);
+        int24 _lowestId = _activeId - 511;
+        int24 _highestId = _activeId + 511;
+        checkBinIdLimit(_lowestId);
+        checkBinIdLimit(_highestId);
         int24 iteration = _activeId;
         uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
 
-        while (iteration < _maxId) {
+        while (iteration < _highestId) {
             iteration++;
             bins[iteration] = _binShare;
         }
         iteration = _activeId;
-        while (iteration > _minId) {
+        while (iteration > _lowestId) {
             iteration--;
             bins[iteration] = _binShare;
         }
@@ -114,8 +114,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 _tokenShare = 1024 << 128; // scaling as 128.128 fixed point
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
-        int24 tickX = (_activeId + _minId) >> 1;
-        int24 tickY = (_activeId + _maxId) >> 1;
+        int24 tickX = (_activeId + _lowestId) >> 1;
+        int24 tickY = (_activeId + _highestId) >> 1;
 
         poolInfo = PoolInfo({
             tokenX: _tokenX,
@@ -130,8 +130,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             activeBinShareX: _binShare,
             activeBinShareY: _binShare,
             activeId: _activeId,
-            minId: _minId,
-            maxId: _maxId,
+            lowestId: _lowestId,
+            highestId: _highestId,
             tickXUpper: tickX, // midpoint,round down
             tickYUpper: tickY, // midpoint,round down
             tickXLower: (_activeId + tickX) >> 1, // midpoint,round down
@@ -320,9 +320,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
         PoolInfo storage _pool = poolInfo;
+        uint256 totalBalXLong = _pool.totalBalanceXLong;
+        uint256 totalBalXShort = _pool.totalBalanceXShort;
+        uint256 totalBalYLong = _pool.totalBalanceYLong;
+        uint256 totalBalYShort = _pool.totalBalanceYShort;
 
-        uint256 totalBalX = _pool.totalBalanceXLong + _pool.totalBalanceXShort;
-        uint256 totalBalY = _pool.totalBalanceYLong + _pool.totalBalanceYShort;
+        uint256 totalBalX = totalBalXLong + totalBalXShort;
+        uint256 totalBalY = totalBalYLong + totalBalYShort;
         int24 binId = _pool.activeId;
 
         (address tokenIn, address tokenOut) = xInYOut ? (_pool.tokenX, _pool.tokenY) : (_pool.tokenY, _pool.tokenX);
@@ -376,20 +380,16 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             (maxAmountIn, price) = _getAmountInFromNextBin(xInYOut, price, binAmountOut);
         }
 
-        uint256 totalBalXLong;
-        uint256 totalBalXShort;
-        uint256 totalBalYLong;
-        uint256 totalBalYShort;
         /// @dev update pool storage after the loop
         if (xInYOut) {
-            totalBalXLong = PriceMath.fullMulDiv(totalBalIn, _pool.totalBalanceXLong, totalBalX);
+            totalBalXLong = PriceMath.fullMulDiv(totalBalIn, totalBalXLong, totalBalX);
             totalBalXShort = totalBalIn - totalBalXLong;
-            totalBalYLong = PriceMath.fullMulDiv(totalBalOut, _pool.totalBalanceYLong, totalBalY);
+            totalBalYLong = PriceMath.fullMulDiv(totalBalOut, totalBalYLong, totalBalY);
             totalBalYShort = totalBalOut - totalBalYLong;
         } else {
-            totalBalYLong = PriceMath.fullMulDiv(totalBalIn, _pool.totalBalanceYLong, totalBalY);
+            totalBalYLong = PriceMath.fullMulDiv(totalBalIn, totalBalYLong, totalBalY);
             totalBalYShort = totalBalIn - totalBalYLong;
-            totalBalXLong = PriceMath.fullMulDiv(totalBalOut, _pool.totalBalanceXLong, totalBalX);
+            totalBalXLong = PriceMath.fullMulDiv(totalBalOut, totalBalXLong, totalBalX);
             totalBalXShort = totalBalOut - totalBalXLong;
         }
 
@@ -415,6 +415,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         require(amountOut >= minAmountOut, SLIPPAGE_EXCEEDED());
         TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
 
-        //TODO: uint24 range = uint24(_priceInfo.maxId - _priceInfo.minId + 1); // we will come back to fix this because maxId and minId can be updated
+        //TODO: uint24 range = uint24(_priceInfo.highestId - _priceInfo.lowestId + 1); // we will come back to fix this because highestId and lowestId can be updated
     }
 }
