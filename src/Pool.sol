@@ -152,10 +152,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort)
     {
         address sender = msg.sender;
-        PoolInfo storage _pool = poolInfo;
-        LpInfo storage _lpInfo = _totalSupply;
-
-        int24 binId = _pool.activeId;
+        int24 binId = poolInfo.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         uint256 amountX;
@@ -163,36 +160,36 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 bal;
 
         if (option.amountForLongX != 0) {
-            bal = _pool.totalBalanceXLong;
-            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _lpInfo.longX, bal); // assume bal != 0
+            bal = poolInfo.totalBalanceXLong;
+            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _totalSupply.longX, bal); // assume bal != 0
             amountX += option.amountForLongX;
             bal += option.amountForLongX;
-            _pool.totalBalanceXLong = bal.safe128();
+            poolInfo.totalBalanceXLong = bal.safe128();
         }
         if (option.amountForLongY != 0) {
-            bal = _pool.totalBalanceYLong;
-            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _lpInfo.longY, bal); // assume bal != 0
+            bal = poolInfo.totalBalanceYLong;
+            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _totalSupply.longY, bal); // assume bal != 0
             amountY += option.amountForLongY;
             bal += option.amountForLongY;
-            _pool.totalBalanceYLong = bal.safe128();
+            poolInfo.totalBalanceYLong = bal.safe128();
         }
         if (option.amountForShortX != 0) {
-            bal = _pool.totalBalanceXShort;
-            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _lpInfo.shortX, bal); // assume bal != 0
+            bal = poolInfo.totalBalanceXShort;
+            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _totalSupply.shortX, bal); // assume bal != 0
             amountX += option.amountForShortX;
             bal += option.amountForShortX;
-            _pool.totalBalanceXShort = bal.safe128();
+            poolInfo.totalBalanceXShort = bal.safe128();
         }
         if (option.amountForShortY != 0) {
-            bal = _pool.totalBalanceYShort;
-            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _lpInfo.shortY, bal); // assume bal != 0
+            bal = poolInfo.totalBalanceYShort;
+            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _totalSupply.shortY, bal); // assume bal != 0
             amountY += option.amountForShortY;
             bal += option.amountForShortY;
-            _pool.totalBalanceYShort = bal.safe128();
+            poolInfo.totalBalanceYShort = bal.safe128();
         }
 
-        if (amountX != 0) TransferHelper.safeTransferFrom(_pool.tokenX, sender, address(this), amountX);
-        if (amountY != 0) TransferHelper.safeTransferFrom(_pool.tokenY, sender, address(this), amountY);
+        if (amountX != 0) TransferHelper.safeTransferFrom(poolInfo.tokenX, sender, address(this), amountX);
+        if (amountY != 0) TransferHelper.safeTransferFrom(poolInfo.tokenY, sender, address(this), amountY);
 
         _mint(option.recipient, LPXLong, LPYLong, LPXShort, LPYShort);
     }
@@ -208,16 +205,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 amountX, uint256 amountY)
     {
         address sender = msg.sender;
-        PoolInfo storage _pool = poolInfo;
-        LpInfo storage _lpInfo = _totalSupply;
-
-        int24 binId = _pool.activeId;
+        int24 binId = poolInfo.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
-        uint256 balXLong = _pool.totalBalanceXLong;
-        uint256 balYLong = _pool.totalBalanceYLong;
-        uint256 balXShort = _pool.totalBalanceXShort;
-        uint256 balYShort = _pool.totalBalanceYShort;
+        uint256 balXLong = poolInfo.totalBalanceXLong;
+        uint256 balYLong = poolInfo.totalBalanceYLong;
+        uint256 balXShort = poolInfo.totalBalanceXShort;
+        uint256 balYShort = poolInfo.totalBalanceYShort;
 
         uint256 totalBalX = balXLong + balXShort;
         uint256 totalBalY = balYLong + balYShort;
@@ -225,32 +219,32 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 amountDeducted;
 
         if (option.amountForLongX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, _lpInfo.longX);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, _totalSupply.longX);
             balXLong -= amountDeducted;
             amountX += amountDeducted;
             require(balXLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
-            _pool.totalBalanceXLong = balXLong.safe128();
+            poolInfo.totalBalanceXLong = balXLong.safe128();
         }
         if (option.amountForLongY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, _lpInfo.longY);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, _totalSupply.longY);
             balYLong -= amountDeducted;
             amountY += amountDeducted;
             require(balYLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
-            _pool.totalBalanceYLong = balYLong.safe128();
+            poolInfo.totalBalanceYLong = balYLong.safe128();
         }
         if (option.amountForShortX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, _lpInfo.shortX);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, _totalSupply.shortX);
             balXShort -= amountDeducted;
             amountX += amountDeducted;
             require(balXShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
-            _pool.totalBalanceXShort = balXShort.safe128();
+            poolInfo.totalBalanceXShort = balXShort.safe128();
         }
         if (option.amountForShortY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, _lpInfo.shortY);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, _totalSupply.shortY);
             balYShort -= amountDeducted;
             amountY += amountDeducted;
             require(balYShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
-            _pool.totalBalanceYShort = balYShort.safe128();
+            poolInfo.totalBalanceYShort = balYShort.safe128();
         }
 
         totalBalX -= amountX;
@@ -263,8 +257,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         _burn(sender, option.amountForLongX, option.amountForLongY, option.amountForShortX, option.amountForShortY);
 
-        if (amountX != 0) TransferHelper.safeTransfer(_pool.tokenX, sender, amountX);
-        if (amountY != 0) TransferHelper.safeTransfer(_pool.tokenY, sender, amountY);
+        if (amountX != 0) TransferHelper.safeTransfer(poolInfo.tokenX, sender, amountX);
+        if (amountY != 0) TransferHelper.safeTransfer(poolInfo.tokenY, sender, amountY);
     }
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
