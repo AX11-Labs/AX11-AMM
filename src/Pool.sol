@@ -268,47 +268,47 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         nonReentrant
         noDelegateCall
     {
-        PoolInfo storage _pool = poolInfo;
+        address tokenX = poolInfo.tokenX;
+        address tokenY = poolInfo.tokenY;
 
         uint256 balanceXBefore;
         uint256 balanceYBefore;
         uint256 feeX;
         uint256 feeY;
-        uint256 balanceXAfter;
-        uint256 balanceYAfter;
+
+        uint256 balanceAfter;
+        uint256 totalBalLong;
+        uint256 totalBalShort;
 
         if (amountX != 0) {
-            balanceXBefore = IERC20(_pool.tokenX).balanceOf(address(this));
+            balanceXBefore = IERC20(tokenX).balanceOf(address(this));
             feeX = PriceMath.divUp(amountX, 10000); // 0.01% fee
-            TransferHelper.safeTransfer(_pool.tokenX, recipient, amountX);
+            TransferHelper.safeTransfer(tokenX, recipient, amountX);
         }
         if (amountY != 0) {
-            balanceYBefore = IERC20(_pool.tokenY).balanceOf(address(this));
+            balanceYBefore = IERC20(tokenY).balanceOf(address(this));
             feeY = PriceMath.divUp(amountY, 10000); // 0.01% fee
-            TransferHelper.safeTransfer(_pool.tokenY, recipient, amountY);
+            TransferHelper.safeTransfer(tokenY, recipient, amountY);
         }
 
         IAx11FlashCallback(callback).flashCallback(feeX, feeY);
 
         if (amountX != 0) {
-            balanceXAfter = IERC20(_pool.tokenX).balanceOf(address(this));
-            uint256 totalBalXLong = PriceMath.fullMulDiv(balanceXAfter, _pool.totalBalanceXLong, balanceXBefore); // assume balanceXBefore != 0
-            uint256 totalBalXShort = balanceXAfter - totalBalXLong;
-            _pool.totalBalanceXLong = totalBalXLong.safe128();
-            _pool.totalBalanceXShort = totalBalXShort.safe128();
+            balanceAfter = IERC20(tokenX).balanceOf(address(this));
+            require(balanceAfter >= (balanceXBefore + feeX), FLASH_INSUFFICIENT_BALANCE());
+            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceXLong, balanceXBefore); // assume balanceXBefore != 0
+            totalBalShort = balanceAfter - totalBalLong;
+            poolInfo.totalBalanceXLong = totalBalLong.safe128();
+            poolInfo.totalBalanceXShort = totalBalShort.safe128();
         }
         if (amountY != 0) {
-            balanceYAfter = IERC20(_pool.tokenY).balanceOf(address(this));
-            uint256 totalBalYLong = PriceMath.fullMulDiv(balanceYAfter, _pool.totalBalanceYLong, balanceYBefore); // assume balanceYBefore != 0
-            uint256 totalBalYShort = balanceYAfter - totalBalYLong;
-            _pool.totalBalanceYLong = totalBalYLong.safe128();
-            _pool.totalBalanceYShort = totalBalYShort.safe128();
+            balanceAfter = IERC20(tokenY).balanceOf(address(this));
+            require(balanceAfter >= (balanceYBefore + feeY), FLASH_INSUFFICIENT_BALANCE());
+            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceYLong, balanceYBefore); // assume balanceYBefore != 0
+            totalBalShort = balanceAfter - totalBalLong;
+            poolInfo.totalBalanceYLong = totalBalLong.safe128();
+            poolInfo.totalBalanceYShort = totalBalShort.safe128();
         }
-
-        require(
-            balanceXAfter >= (balanceXBefore + feeX) && balanceYAfter >= (balanceYBefore + feeY),
-            FLASH_INSUFFICIENT_BALANCE()
-        );
     }
 
     function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
