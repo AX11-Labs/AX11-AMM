@@ -319,22 +319,43 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 amountOut)
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
-        PoolInfo storage _pool = poolInfo;
-        uint256 totalBalXLong = _pool.totalBalanceXLong;
-        uint256 totalBalXShort = _pool.totalBalanceXShort;
-        uint256 totalBalYLong = _pool.totalBalanceYLong;
-        uint256 totalBalYShort = _pool.totalBalanceYShort;
+        uint256 totalBalXLong = poolInfo.totalBalanceXLong;
+        uint256 totalBalXShort = poolInfo.totalBalanceXShort;
+        uint256 totalBalYLong = poolInfo.totalBalanceYLong;
+        uint256 totalBalYShort = poolInfo.totalBalanceYShort;
 
         uint256 totalBalX = totalBalXLong + totalBalXShort;
         uint256 totalBalY = totalBalYLong + totalBalYShort;
-        int24 binId = _pool.activeId;
+        int24 binId = poolInfo.activeId;
 
-        (address tokenIn, address tokenOut) = xInYOut ? (_pool.tokenX, _pool.tokenY) : (_pool.tokenY, _pool.tokenX);
-        (uint256 totalBalIn, uint256 totalBalOut) = xInYOut ? (totalBalX, totalBalY) : (totalBalY, totalBalX);
-        (uint256 binShareIn, uint256 binShareOut) =
-            xInYOut ? (_pool.activeBinShareX, _pool.activeBinShareY) : (_pool.activeBinShareY, _pool.activeBinShareX);
-        (uint256 totalBinShareIn, uint256 totalBinShareOut) =
-            xInYOut ? (_pool.totalBinShareX, _pool.totalBinShareY) : (_pool.totalBinShareY, _pool.totalBinShareX);
+        address tokenIn;
+        address tokenOut;
+        uint256 totalBalIn;
+        uint256 totalBalOut;
+        uint256 binShareIn;
+        uint256 binShareOut;
+        uint256 totalBinShareIn;
+        uint256 totalBinShareOut;
+      
+        if (xInYOut) {
+            tokenIn = poolInfo.tokenX;
+            tokenOut = poolInfo.tokenY;
+            totalBalIn = totalBalX; 
+            totalBalOut = totalBalY;
+            binShareIn = poolInfo.activeBinShareX;
+            binShareOut = poolInfo.activeBinShareY;
+            totalBinShareIn = poolInfo.totalBinShareX;
+            totalBinShareOut = poolInfo.totalBinShareY;
+        } else {
+            tokenIn = poolInfo.tokenY;
+            tokenOut = poolInfo.tokenX;
+            totalBalIn = totalBalY;
+            totalBalOut = totalBalX;
+            binShareIn = poolInfo.activeBinShareY;
+            binShareOut = poolInfo.activeBinShareX;
+            totalBinShareIn = poolInfo.totalBinShareY;
+            totalBinShareOut = poolInfo.totalBinShareX;
+        }
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
@@ -399,15 +420,15 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             MINIMUM_LIQUIDITY_EXCEEDED()
         );
 
-        _pool.totalBalanceXLong = totalBalXLong.safe128();
-        _pool.totalBalanceYLong = totalBalYLong.safe128();
-        _pool.totalBalanceXShort = totalBalXShort.safe128();
-        _pool.totalBalanceYShort = totalBalYShort.safe128();
-        _pool.totalBinShareX = xInYOut ? totalBinShareIn : totalBinShareOut;
-        _pool.totalBinShareY = xInYOut ? totalBinShareOut : totalBinShareIn;
-        _pool.activeBinShareX = xInYOut ? binShareIn : binShareOut;
-        _pool.activeBinShareY = xInYOut ? binShareOut : binShareIn;
-        _pool.activeId = binId;
+        poolInfo.totalBalanceXLong = totalBalXLong.safe128();
+        poolInfo.totalBalanceYLong = totalBalYLong.safe128();
+        poolInfo.totalBalanceXShort = totalBalXShort.safe128();
+        poolInfo.totalBalanceYShort = totalBalYShort.safe128();
+        poolInfo.totalBinShareX = xInYOut ? totalBinShareIn : totalBinShareOut;
+        poolInfo.totalBinShareY = xInYOut ? totalBinShareOut : totalBinShareIn;
+        poolInfo.activeBinShareX = xInYOut ? binShareIn : binShareOut;
+        poolInfo.activeBinShareY = xInYOut ? binShareOut : binShareIn;
+        poolInfo.activeId = binId;
 
         /// TODO: should also update priceInfo here ...............
         // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
