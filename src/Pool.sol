@@ -136,7 +136,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             tickYUpper: tickY, // midpoint,round down
             tickXLower: (_activeId + tickX) >> 1, // midpoint,round down
             tickYLower: (_activeId + tickY) >> 1, // midpoint,round down
-            targetTimestamp: uint88(block.timestamp)
+            volatilityLevel: 1,
+            volatilityTimestamp: uint40(block.timestamp),
+            targetTimestamp: uint40(block.timestamp + 24 days)
         });
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
@@ -296,7 +298,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         if (amountX != 0) {
             balanceAfter = IERC20(tokenX).balanceOf(address(this));
-            require(balanceAfter >= (balanceXBefore + feeX), FLASH_INSUFFICIENT_BALANCE());
+            require(balanceAfter >= (balanceXBefore + feeX), INSUFFICIENT_PAYBACK());
             totalBalLong = PriceMath.fullMulDivUnchecked(balanceAfter, poolInfo.totalBalanceXLong, balanceXBefore); // overflow is not realistic
             totalBalShort = balanceAfter - totalBalLong;
             poolInfo.totalBalanceXLong = totalBalLong.safe128();
@@ -304,11 +306,50 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
         if (amountY != 0) {
             balanceAfter = IERC20(tokenY).balanceOf(address(this));
-            require(balanceAfter >= (balanceYBefore + feeY), FLASH_INSUFFICIENT_BALANCE());
+            require(balanceAfter >= (balanceYBefore + feeY), INSUFFICIENT_PAYBACK());
             totalBalLong = PriceMath.fullMulDivUnchecked(balanceAfter, poolInfo.totalBalanceYLong, balanceYBefore); // overflow is not realistic
             totalBalShort = balanceAfter - totalBalLong;
             poolInfo.totalBalanceYLong = totalBalLong.safe128();
             poolInfo.totalBalanceYShort = totalBalShort.safe128();
+        }
+    }
+
+    function updateVolatility(uint256 volatilityLevel, uint256 volatilityTimestamp) private {
+        uint256 currentTimestamp = block.timestamp;
+        if (currentTimestamp >= volatilityTimestamp) {
+            // should decide whether to shrink or not
+            if (volatilityLevel == 1) {
+                uint24 range = uint24(poolInfo.highestId - poolInfo.activeId + 1) >> 1;
+                if (range >= 16 && range <= 512){
+                    uint256 totalBinShareRemoved;
+                    int24 binId = poolInfo.lowestId;
+                    for (uint256 i = 0; i < range; i++){
+                        totalBinShareRemoved+=bins[binId];
+                        // we dont have to delete bins[binId], just leave it as is.
+                        binId++;
+                    }
+                    poolInfo.lowestId = binId;
+                    poolInfo.totalBinShareX -= totalBinShareRemoved;
+                    totalBinShareRemoved = 0;
+
+                    binId = poolInfo.highestId;
+                    for (uint256 i = 0; i < range; i++){
+                        totalBinShareRemoved+=bins[binId];
+                        // we dont have to delete bins[binId], just leave it as is.
+                        binId--;
+                    }
+                    poolInfo.highestId = binId;
+                    poolInfo.totalBinShareY -= totalBinShareRemoved;
+                }
+            } else {
+                poolInfo.volatilityLevel = 1;
+            }
+            poolInfo.tickXUpper = (poolInfo.activeId + poolInfo.highestId) >> 1;
+            poolInfo.tickYUpper = (poolInfo.activeId + poolInfo.lowestId) >> 1;
+            poolInfo.tickXLower = (poolInfo.activeId + poolInfo.tickXUpper) >> 1;
+            poolInfo.tickYLower = (poolInfo.activeId + poolInfo.tickYUpper) >> 1;
+            poolInfo.volatilityTimestamp = uint40(currentTimestamp);
+            poolInfo.targetTimestamp = uint40(currentTimestamp + 24 days);
         }
     }
 
