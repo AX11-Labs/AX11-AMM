@@ -19,7 +19,7 @@ import {IAx11FlashCallback} from "./interfaces/IAx11FlashCallback.sol";
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
-    mapping(int24 binId => uint256 binshare) public bins; // share is stored as 128.128 fixed point
+    mapping(int24 binId => uint256 binshare) private bins; // share is stored as 128.128 fixed point
 
     address public immutable override factory;
 
@@ -135,7 +135,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             tickXUpper: tickX, // midpoint,round down
             tickYUpper: tickY, // midpoint,round down
             tickXLower: (_activeId + tickX) >> 1, // midpoint,round down
-            tickYLower: (_activeId + tickY) >> 1 // midpoint,round down
+            tickYLower: (_activeId + tickY) >> 1, // midpoint,round down
+            targetTimestamp: uint88(block.timestamp)
         });
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
@@ -161,28 +162,28 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         if (option.amountForLongX != 0) {
             bal = poolInfo.totalBalanceXLong;
-            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _totalSupply.longX, bal); // assume bal != 0
+            LPXLong = PriceMath.fullMulDivUnchecked(option.amountForLongX, _totalSupply.longX, bal); // overflow is not realistic, bal can't be 0.
             amountX += option.amountForLongX;
             bal += option.amountForLongX;
             poolInfo.totalBalanceXLong = bal.safe128();
         }
         if (option.amountForLongY != 0) {
             bal = poolInfo.totalBalanceYLong;
-            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _totalSupply.longY, bal); // assume bal != 0
+            LPYLong = PriceMath.fullMulDivUnchecked(option.amountForLongY, _totalSupply.longY, bal); // overflow is not realistic, bal can't be 0.
             amountY += option.amountForLongY;
             bal += option.amountForLongY;
             poolInfo.totalBalanceYLong = bal.safe128();
         }
         if (option.amountForShortX != 0) {
             bal = poolInfo.totalBalanceXShort;
-            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _totalSupply.shortX, bal); // assume bal != 0
+            LPXShort = PriceMath.fullMulDivUnchecked(option.amountForShortX, _totalSupply.shortX, bal); // overflow is not realistic, bal can't be 0.
             amountX += option.amountForShortX;
             bal += option.amountForShortX;
             poolInfo.totalBalanceXShort = bal.safe128();
         }
         if (option.amountForShortY != 0) {
             bal = poolInfo.totalBalanceYShort;
-            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _totalSupply.shortY, bal); // assume bal != 0
+            LPYShort = PriceMath.fullMulDivUnchecked(option.amountForShortY, _totalSupply.shortY, bal); // overflow is not realistic, bal can't be 0.
             amountY += option.amountForShortY;
             bal += option.amountForShortY;
             poolInfo.totalBalanceYShort = bal.safe128();
@@ -219,28 +220,28 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 amountDeducted;
 
         if (option.amountForLongX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, _totalSupply.longX);
+            amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForLongX, balXLong, _totalSupply.longX); // overflow is not realistic, _totalSupply can't be 0.
             balXLong -= amountDeducted;
             amountX += amountDeducted;
             require(balXLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
             poolInfo.totalBalanceXLong = balXLong.safe128();
         }
         if (option.amountForLongY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, _totalSupply.longY);
+            amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForLongY, balYLong, _totalSupply.longY); // overflow is not realistic, _totalSupply can't be 0.
             balYLong -= amountDeducted;
             amountY += amountDeducted;
             require(balYLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
             poolInfo.totalBalanceYLong = balYLong.safe128();
         }
         if (option.amountForShortX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, _totalSupply.shortX);
+            amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForShortX, balXShort, _totalSupply.shortX); // overflow is not realistic, _totalSupply can't be 0.
             balXShort -= amountDeducted;
             amountX += amountDeducted;
             require(balXShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
             poolInfo.totalBalanceXShort = balXShort.safe128();
         }
         if (option.amountForShortY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, _totalSupply.shortY);
+            amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForShortY, balYShort, _totalSupply.shortY); // overflow is not realistic, _totalSupply can't be 0.
             balYShort -= amountDeducted;
             amountY += amountDeducted;
             require(balYShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
@@ -296,7 +297,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (amountX != 0) {
             balanceAfter = IERC20(tokenX).balanceOf(address(this));
             require(balanceAfter >= (balanceXBefore + feeX), FLASH_INSUFFICIENT_BALANCE());
-            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceXLong, balanceXBefore); // assume balanceXBefore != 0
+            totalBalLong = PriceMath.fullMulDivUnchecked(balanceAfter, poolInfo.totalBalanceXLong, balanceXBefore); // overflow is not realistic
             totalBalShort = balanceAfter - totalBalLong;
             poolInfo.totalBalanceXLong = totalBalLong.safe128();
             poolInfo.totalBalanceXShort = totalBalShort.safe128();
@@ -304,7 +305,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (amountY != 0) {
             balanceAfter = IERC20(tokenY).balanceOf(address(this));
             require(balanceAfter >= (balanceYBefore + feeY), FLASH_INSUFFICIENT_BALANCE());
-            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceYLong, balanceYBefore); // assume balanceYBefore != 0
+            totalBalLong = PriceMath.fullMulDivUnchecked(balanceAfter, poolInfo.totalBalanceYLong, balanceYBefore); // overflow is not realistic
             totalBalShort = balanceAfter - totalBalLong;
             poolInfo.totalBalanceYLong = totalBalLong.safe128();
             poolInfo.totalBalanceYShort = totalBalShort.safe128();
@@ -336,11 +337,11 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 binShareOut;
         uint256 totalBinShareIn;
         uint256 totalBinShareOut;
-      
+
         if (xInYOut) {
             tokenIn = poolInfo.tokenX;
             tokenOut = poolInfo.tokenY;
-            totalBalIn = totalBalX; 
+            totalBalIn = totalBalX;
             totalBalOut = totalBalY;
             binShareIn = poolInfo.activeBinShareX;
             binShareOut = poolInfo.activeBinShareY;
@@ -359,7 +360,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
 
-        uint256 binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+        uint256 binAmountOut = PriceMath.fullMulDivUnchecked(totalBalOut, binShareOut, totalBinShareOut); // overflow is not realistic
         (uint256 maxAmountIn, uint256 price) = _getAmountInFromBin(xInYOut, binId, binAmountOut);
         uint256 usedBinShareOut;
 
@@ -372,24 +373,23 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                 usedBinShareOut = binShareOut;
                 binShareOut = 0;
             } else {
-                uint256 usedAmountOut = PriceMath.fullMulDiv(amountIn, binAmountOut, maxAmountIn);
-                require(usedAmountOut != 0, TRADE_SIZE_TOO_SMALL());
+                uint256 usedAmountOut = PriceMath.fullMulDiv(amountIn, binAmountOut, maxAmountIn); // maxAmountIn can be 0 (case: perfect drain)
                 amountOut += usedAmountOut;
                 totalBalOut -= usedAmountOut; // update total balance out
-                usedBinShareOut = PriceMath.fullMulDiv(usedAmountOut, binShareOut, binAmountOut);
+                usedBinShareOut = PriceMath.fullMulDiv(usedAmountOut, binShareOut, binAmountOut); // binAmountOut can be 0 (case: perfect drain)
                 binShareOut -= usedBinShareOut;
                 maxAmountIn = amountIn;
                 amountIn = 0;
             }
             totalBalIn += maxAmountIn; // update total balance in
-            uint256 binShareInGain = PriceMath.fullMulDiv(maxAmountIn, totalBinShareIn, totalBalIn);
+            uint256 binShareInGain = PriceMath.fullMulDivUnchecked(maxAmountIn, totalBinShareIn, totalBalIn); // overflow is not realistic
             binShareIn += binShareInGain;
             totalBinShareIn += binShareInGain; // update total bin share
             totalBinShareOut -= usedBinShareOut; // update total bin share
 
             if (amountIn == 0) break; // delete bins[binId] is not necessary
             // because if we pass the bin, it will set the new value in the next line
-            // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y
+            // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y in poolInfo
 
             bins[binId] = binShareIn; // add to new bin
             binId = xInYOut ? binId + 1 : binId - 1;
@@ -397,20 +397,20 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             binShareIn = 0;
             binShareOut = bins[binId];
 
-            binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
+            binAmountOut = PriceMath.fullMulDivUnchecked(totalBalOut, binShareOut, totalBinShareOut); // overflow is not realistic
             (maxAmountIn, price) = _getAmountInFromNextBin(xInYOut, price, binAmountOut);
         }
 
         /// @dev update pool storage after the loop
         if (xInYOut) {
-            totalBalXLong = PriceMath.fullMulDiv(totalBalIn, totalBalXLong, totalBalX);
+            totalBalXLong = PriceMath.fullMulDivUnchecked(totalBalIn, totalBalXLong, totalBalX); // overflow is not realistic
             totalBalXShort = totalBalIn - totalBalXLong;
-            totalBalYLong = PriceMath.fullMulDiv(totalBalOut, totalBalYLong, totalBalY);
+            totalBalYLong = PriceMath.fullMulDivUnchecked(totalBalOut, totalBalYLong, totalBalY); // overflow is not realistic
             totalBalYShort = totalBalOut - totalBalYLong;
         } else {
-            totalBalYLong = PriceMath.fullMulDiv(totalBalIn, totalBalYLong, totalBalY);
+            totalBalYLong = PriceMath.fullMulDivUnchecked(totalBalIn, totalBalYLong, totalBalY); // overflow is not realistic
             totalBalYShort = totalBalIn - totalBalYLong;
-            totalBalXLong = PriceMath.fullMulDiv(totalBalOut, totalBalXLong, totalBalX);
+            totalBalXLong = PriceMath.fullMulDivUnchecked(totalBalOut, totalBalXLong, totalBalX); // overflow is not realistic
             totalBalXShort = totalBalOut - totalBalXLong;
         }
 
