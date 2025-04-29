@@ -6,7 +6,7 @@ interface IPool {
     error INVALID_BIN_ID();
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
-    error FLASH_INSUFFICIENT_BALANCE();
+    error INSUFFICIENT_PAYBACK();
     error MINIMUM_LIQUIDITY_EXCEEDED();
 
     // ---------- Storage struct ----------
@@ -36,7 +36,9 @@ interface IPool {
         int24 tickYUpper;
         int24 tickXLower;
         int24 tickYLower;
-        uint88 targetTimestamp;
+        uint8 volatilityLevel;
+        uint40 volatilityTimestamp;
+        uint40 targetTimestamp;
     }
 
     // ---------- Function input struct ----------
