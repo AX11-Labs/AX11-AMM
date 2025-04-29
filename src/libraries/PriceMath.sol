@@ -64,6 +64,29 @@ library PriceMath {
         }
     }
 
+    /// @dev Calculates `floor(x * y / d)` with full precision.
+    /// Behavior is undefined if `d` is zero or the final result cannot fit in 256 bits.
+    /// Performs the full 512 bit calculation regardless.
+    function fullMulDivUnchecked(uint256 x, uint256 y, uint256 d) internal pure returns (uint256 z) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            z := mul(x, y)
+            let mm := mulmod(x, y, not(0))
+            let p1 := sub(mm, add(z, lt(mm, z)))
+            let t := and(d, sub(0, d))
+            let r := mulmod(x, y, d)
+            d := div(d, t)
+            let inv := xor(2, mul(3, d))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            inv := mul(inv, sub(2, mul(d, inv)))
+            z :=
+                mul(or(mul(sub(p1, gt(r, z)), add(div(sub(0, t), t), 1)), div(sub(z, r), t)), mul(sub(2, mul(d, inv)), inv))
+        }
+    }
+
     /// @dev Calculates `floor(x * y / d)` with full precision, rounded up.
     /// Throws if result overflows a uint256 or when `d` is zero.
     /// Credit to Uniswap-v3-core under MIT license:
