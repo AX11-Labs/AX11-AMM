@@ -15,8 +15,6 @@ interface IPool {
         // token info
         address tokenX;
         address tokenY;
-        // pool initiator
-        address initiator;
         // total balance
         uint128 totalBalanceXLong;
         uint128 totalBalanceYLong;
@@ -39,6 +37,8 @@ interface IPool {
         uint8 volatilityLevel;
         uint40 volatilityTimestamp;
         uint40 targetTimestamp;
+        // pool initiator
+        address initiator;
     }
 
     // ---------- Function input struct ----------
