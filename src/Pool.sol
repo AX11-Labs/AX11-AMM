@@ -120,7 +120,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo = PoolInfo({
             tokenX: _tokenX,
             tokenY: _tokenY,
-            initiator: _initiator,
             totalBalanceXLong: 512,
             totalBalanceYLong: 512,
             totalBalanceXShort: 512,
@@ -138,7 +137,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             tickYLower: (_activeId + tickY) >> 1, // midpoint,round down
             volatilityLevel: 1,
             volatilityTimestamp: uint40(block.timestamp),
-            targetTimestamp: uint40(block.timestamp + 24 days)
+            targetTimestamp: uint40(block.timestamp + 24 days),
+            initiator: _initiator
         });
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
@@ -369,6 +369,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 totalBalX = totalBalXLong + totalBalXShort;
         uint256 totalBalY = totalBalYLong + totalBalYShort;
         int24 binId = poolInfo.activeId;
+        int24 newHighestId = poolInfo.highestId;
+        int24 newLowestId = poolInfo.lowestId;
 
         address tokenIn;
         address tokenOut;
@@ -405,7 +407,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         (uint256 maxAmountIn, uint256 price) = _getAmountInFromBin(xInYOut, binId, binAmountOut);
         uint256 usedBinShareOut;
 
-        while (true) {
+        while (binId >= newLowestId && binId <= newHighestId) {
             /// @dev update bin share within the loop
             if (amountIn >= maxAmountIn) {
                 amountIn -= maxAmountIn;
@@ -433,8 +435,32 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y in poolInfo
 
             bins[binId] = binShareIn; // add to new bin
-            binId = xInYOut ? binId + 1 : binId - 1;
-            checkBinIdLimit(binId);
+            uint256 adjustedBinShare;
+            if (xInYOut) {
+                binId++;
+                if (newHighestId < 88767) {
+                    adjustedBinShare = (bins[binId] + bins[newHighestId]) >> 1;
+                    newHighestId++;
+                    bins[newHighestId] = adjustedBinShare;
+                    totalBinShareOut += adjustedBinShare;
+                }
+                if (binId - newLowestId > newHighestId - binId) {
+                    totalBinShareIn -= bins[newLowestId];
+                    newLowestId++;
+                }
+            } else {
+                binId--;
+                if (newLowestId > -88767) {
+                    adjustedBinShare = (bins[binId] + bins[newLowestId]) >> 1;
+                    newLowestId--;
+                    bins[newLowestId] = adjustedBinShare;
+                    totalBinShareOut += adjustedBinShare;
+                }
+                if (newHighestId - binId > binId - newLowestId) {
+                    totalBinShareIn -= bins[newHighestId];
+                    newHighestId--;
+                }
+            }
             binShareIn = 0;
             binShareOut = bins[binId];
 
@@ -455,6 +481,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             totalBalXShort = totalBalOut - totalBalXLong;
         }
 
+        checkBinIdLimit(binId);
         require(totalBalIn >= 1024 && totalBalOut >= 1024, MINIMUM_LIQUIDITY_EXCEEDED());
         require(
             totalBalXLong != 0 && totalBalYLong != 0 && totalBalXShort != 0 && totalBalYShort != 0,
@@ -470,7 +497,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo.activeBinShareX = xInYOut ? binShareIn : binShareOut;
         poolInfo.activeBinShareY = xInYOut ? binShareOut : binShareIn;
         poolInfo.activeId = binId;
-
+        poolInfo.lowestId = newLowestId;
+        poolInfo.highestId = newHighestId;
         /// TODO: should also update priceInfo here ...............
         // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
 
