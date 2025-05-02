@@ -320,11 +320,11 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             // should decide whether to shrink or not
             if (volatilityLevel == 1) {
                 uint24 range = uint24(poolInfo.highestId - poolInfo.activeId + 1) >> 1;
-                if (range >= 16 && range <= 512){
+                if (range >= 16 && range <= 512) {
                     uint256 totalBinShareRemoved;
                     int24 binId = poolInfo.lowestId;
-                    for (uint256 i = 0; i < range; i++){
-                        totalBinShareRemoved+=bins[binId];
+                    for (uint256 i = 0; i < range; i++) {
+                        totalBinShareRemoved += bins[binId];
                         // we dont have to delete bins[binId], just leave it as is.
                         binId++;
                     }
@@ -333,8 +333,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     totalBinShareRemoved = 0;
 
                     binId = poolInfo.highestId;
-                    for (uint256 i = 0; i < range; i++){
-                        totalBinShareRemoved+=bins[binId];
+                    for (uint256 i = 0; i < range; i++) {
+                        totalBinShareRemoved += bins[binId];
                         // we dont have to delete bins[binId], just leave it as is.
                         binId--;
                     }
