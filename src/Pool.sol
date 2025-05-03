@@ -114,8 +114,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 _tokenShare = 1024 << 128; // scaling as 128.128 fixed point
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
-        int24 tickX = (_activeId + _lowestId) >> 1;
-        int24 tickY = (_activeId + _highestId) >> 1;
+        int24 _tickX = (_activeId + _lowestId) >> 1;
+        int24 _tickY = (_activeId + _highestId) >> 1;
+        uint48 _currentTimestamp = uint48(block.timestamp);
 
         poolInfo = PoolInfo({
             tokenX: _tokenX,
@@ -131,13 +132,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             activeId: _activeId,
             lowestId: _lowestId,
             highestId: _highestId,
-            tickXUpper: tickX, // midpoint,round down
-            tickYUpper: tickY, // midpoint,round down
-            tickXLower: (_activeId + tickX) >> 1, // midpoint,round down
-            tickYLower: (_activeId + tickY) >> 1, // midpoint,round down
-            volatilityLevel: 1,
-            volatilityTimestamp: uint40(block.timestamp),
-            targetTimestamp: uint40(block.timestamp + 24 days),
+            tickX: _tickX, // midpoint,round down
+            tickY: _tickY, // midpoint,round down
+            oldActiveId: _activeId,
+            targetTimestamp: _currentTimestamp + 24 days, // overflow is not realistic
+            volatilityTimestamp: _currentTimestamp, // overflow is not realistic
+            volatilityLevel: 1, // 1 means 'low', 2 means 'medium', 3 means 'high'
+            contraction: 2, // 1 means false, 2 means true
             initiator: _initiator
         });
 
@@ -344,10 +345,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             } else {
                 poolInfo.volatilityLevel = 1;
             }
-            poolInfo.tickXUpper = (poolInfo.activeId + poolInfo.highestId) >> 1;
-            poolInfo.tickYUpper = (poolInfo.activeId + poolInfo.lowestId) >> 1;
-            poolInfo.tickXLower = (poolInfo.activeId + poolInfo.tickXUpper) >> 1;
-            poolInfo.tickYLower = (poolInfo.activeId + poolInfo.tickYUpper) >> 1;
+            poolInfo.tickX = (poolInfo.activeId + poolInfo.highestId) >> 1;
+            poolInfo.tickY = (poolInfo.activeId + poolInfo.lowestId) >> 1;
             poolInfo.volatilityTimestamp = uint40(currentTimestamp);
             poolInfo.targetTimestamp = uint40(currentTimestamp + 24 days);
         }
@@ -361,6 +360,50 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 amountOut)
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
+        int24 binId = poolInfo.activeId;
+
+        uint56 currentVolatilityTimestamp = poolInfo.volatilityTimestamp;
+        int24 range = poolInfo.highestId - poolInfo.lowestId;
+        uint256 currentTimestamp = block.timestamp;
+
+        int24 oldActiveId = poolInfo.oldActiveId;
+        int24 tickX = poolInfo.tickX;
+        int24 tickY = poolInfo.tickY;
+        uint48 volatilityTimestamp = poolInfo.volatilityTimestamp;
+        uint48 targetTimestamp = poolInfo.targetTimestamp;
+        uint8 volatilityLevel = poolInfo.volatilityLevel;
+        uint8 contraction = poolInfo.contraction;
+
+        if (currentTimestamp - currentVolatilityTimestamp >= 255) {
+            // stay still
+            if (volatilityLevel == 2) {
+                contraction = 1;
+            }
+            // expansion
+            if (volatilityLevel == 3) {
+                if (range < 1022 && range > 62) {
+                    // expand here
+                    
+                }
+                oldActiveId = binId;
+                tickX = (binId + poolInfo.lowestId) >> 1;
+                tickY = (binId + poolInfo.highestId) >> 1;
+                volatilityTimestamp = uint48(currentTimestamp);
+                targetTimestamp = uint48(currentTimestamp + 24 days);
+                volatilityLevel = 1;
+                contraction = 2; // reset
+            }
+        }
+
+        if (currentTimestamp >= poolInfo.targetTimestamp) {
+            if (contraction == 2) {
+                // shrink
+            } else {
+                // stay still
+            }
+            // reset the rest info
+        }
+
         uint256 totalBalXLong = poolInfo.totalBalanceXLong;
         uint256 totalBalXShort = poolInfo.totalBalanceXShort;
         uint256 totalBalYLong = poolInfo.totalBalanceYLong;
@@ -368,7 +411,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         uint256 totalBalX = totalBalXLong + totalBalXShort;
         uint256 totalBalY = totalBalYLong + totalBalYShort;
-        int24 binId = poolInfo.activeId;
         int24 newHighestId = poolInfo.highestId;
         int24 newLowestId = poolInfo.lowestId;
 
