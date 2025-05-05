@@ -315,43 +315,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
     }
 
-    function updateVolatility(uint256 volatilityLevel, uint256 volatilityTimestamp) private {
-        uint256 currentTimestamp = block.timestamp;
-        if (currentTimestamp >= volatilityTimestamp) {
-            // should decide whether to shrink or not
-            if (volatilityLevel == 1) {
-                uint24 range = uint24(poolInfo.highestId - poolInfo.activeId + 1) >> 1;
-                if (range >= 16 && range <= 512) {
-                    uint256 totalBinShareRemoved;
-                    int24 binId = poolInfo.lowestId;
-                    for (uint256 i = 0; i < range; i++) {
-                        totalBinShareRemoved += bins[binId];
-                        // we dont have to delete bins[binId], just leave it as is.
-                        binId++;
-                    }
-                    poolInfo.lowestId = binId;
-                    poolInfo.totalBinShareX -= totalBinShareRemoved;
-                    totalBinShareRemoved = 0;
-
-                    binId = poolInfo.highestId;
-                    for (uint256 i = 0; i < range; i++) {
-                        totalBinShareRemoved += bins[binId];
-                        // we dont have to delete bins[binId], just leave it as is.
-                        binId--;
-                    }
-                    poolInfo.highestId = binId;
-                    poolInfo.totalBinShareY -= totalBinShareRemoved;
-                }
-            } else {
-                poolInfo.volatilityLevel = 1;
-            }
-            poolInfo.tickX = (poolInfo.activeId + poolInfo.highestId) >> 1;
-            poolInfo.tickY = (poolInfo.activeId + poolInfo.lowestId) >> 1;
-            poolInfo.volatilityTimestamp = uint40(currentTimestamp);
-            poolInfo.targetTimestamp = uint40(currentTimestamp + 24 days);
-        }
-    }
-
     function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
         external
         ensure(deadline)
