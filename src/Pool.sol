@@ -47,12 +47,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     }
 
     function checkBinIdLimit(int24 value) private pure {
-        require(value >= -88767 && value <= 88767, INVALID_BIN_ID());
+        require(value >= -44405 && value <= 44405, INVALID_BIN_ID());
     }
 
-    /// @dev equivalent to (1001>>128)/1000, which is 1.001 in 128.128 fixed point
+    /// @dev equivalent to (1002<<128)/1000, which is 1.002 in 128.128 fixed point
     function getBase() private pure returns (uint256) {
-        return 340622649287859401926837982039199979667;
+        return 340962931654780340390301356646631747878;
     }
     /// @notice EXCLUDING FEE
     /// @notice This is only for calculating the amountIn within a single bin.
@@ -77,10 +77,10 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 maxAmountIn, uint256 price)
     {
         if (xInYOut) {
-            price = ((previousPrice * 1001) / 1000);
+            price = ((previousPrice * 1002) / 1000);
             maxAmountIn = Uint256x256Math.shiftDivRoundUp(balance, 128, price);
         } else {
-            price = ((previousPrice * 1000) / 1001);
+            price = ((previousPrice * 1000) / 1002);
             maxAmountIn = Uint256x256Math.mulShiftRoundUp(balance, price, 128);
         }
     }
@@ -88,19 +88,19 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     /// @notice Initialize the pool
     /// @param _activeId The active bin id
     /// @param _initiator The initiator of the pool
-    /// @dev we assume the amount received by the pool is ALWAYS equal to transferFrom value of 512
+    /// @dev we assume the amount received by the pool is ALWAYS equal to the transferFrom value of 512
     /// Note: meaning that we don't support fee-on-transfer tokens
     function initialize(address _tokenX, address _tokenY, int24 _activeId, address _initiator) private {
-        TransferHelper.safeTransferFrom(_tokenX, _initiator, address(this), 1024);
-        TransferHelper.safeTransferFrom(_tokenY, _initiator, address(this), 1024);
+        TransferHelper.safeTransferFrom(_tokenX, _initiator, address(this), 512);
+        TransferHelper.safeTransferFrom(_tokenY, _initiator, address(this), 512);
 
-        int24 _lowestId = _activeId - 511;
-        int24 _highestId = _activeId + 511;
+        int24 _lowestId = _activeId - 255;
+        int24 _highestId = _activeId + 255;
         checkBinIdLimit(_lowestId);
         checkBinIdLimit(_highestId);
-        int24 iteration = _activeId;
         uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
 
+        int24 iteration = _activeId;
         while (iteration < _highestId) {
             iteration++;
             bins[iteration] = _binShare;
@@ -111,20 +111,20 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             bins[iteration] = _binShare;
         }
 
-        uint256 _tokenShare = 1024 << 128; // scaling as 128.128 fixed point
+        uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
 
-        int24 _tickX = (_activeId + _lowestId) >> 1;
-        int24 _tickY = (_activeId + _highestId) >> 1;
-        uint48 _currentTimestamp = uint48(block.timestamp);
+        int24 _tickX = (_activeId + _lowestId) >> 1; // midpoint,round down
+        int24 _tickY = (_activeId + _highestId) >> 1; // midpoint,round down
+        uint48 _currentTimestamp = uint48(block.timestamp); // overflow is not realistic
 
         poolInfo = PoolInfo({
             tokenX: _tokenX,
             tokenY: _tokenY,
-            totalBalanceXLong: 512,
-            totalBalanceYLong: 512,
-            totalBalanceXShort: 512,
-            totalBalanceYShort: 512,
+            totalBalanceXLong: 256,
+            totalBalanceYLong: 256,
+            totalBalanceXShort: 256,
+            totalBalanceYShort: 256,
             totalBinShareX: _tokenShare,
             totalBinShareY: _tokenShare,
             activeBinShareX: _binShare,
@@ -132,11 +132,11 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             activeId: _activeId,
             lowestId: _lowestId,
             highestId: _highestId,
-            tickX: _tickX, // midpoint,round down
-            tickY: _tickY, // midpoint,round down
+            tickX: _tickX, 
+            tickY: _tickY, 
             oldActiveId: _activeId,
             targetTimestamp: _currentTimestamp + 24 days, // overflow is not realistic
-            volatilityTimestamp: _currentTimestamp, // overflow is not realistic
+            volatilityTimestamp: _currentTimestamp, 
             volatilityLevel: 1, // 1 means 'low', 2 means 'medium', 3 means 'high'
             contraction: 2, // 1 means false, 2 means true
             initiator: _initiator
@@ -254,8 +254,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         totalBalX -= amountX;
         totalBalY -= amountY;
 
-        if (totalBalX < 1024) amountX -= (1024 - totalBalX);
-        if (totalBalY < 1024) amountY -= (1024 - totalBalY);
+        if (totalBalX < 512) amountX -= (512 - totalBalX);
+        if (totalBalY < 512) amountY -= (512 - totalBalY);
         /// @dev if a user's share is too large that it covers almost the entire pool, they need to leave the minimum liquidity in the pool.
         /// so they may be able to withdraw 99.999xxx% of their funds.
 
@@ -480,7 +480,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             uint256 adjustedBinShare;
             if (xInYOut) {
                 binId++;
-                if (newHighestId < 88767) {
+                if (newHighestId < 44405) {
                     adjustedBinShare = (bins[binId] + bins[newHighestId]) >> 1;
                     newHighestId++;
                     bins[newHighestId] = adjustedBinShare;
@@ -492,7 +492,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                 }
             } else {
                 binId--;
-                if (newLowestId > -88767) {
+                if (newLowestId > -44405) {
                     adjustedBinShare = (bins[binId] + bins[newLowestId]) >> 1;
                     newLowestId--;
                     bins[newLowestId] = adjustedBinShare;
@@ -524,7 +524,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         checkBinIdLimit(binId);
-        require(totalBalIn >= 1024 && totalBalOut >= 1024, MINIMUM_LIQUIDITY_EXCEEDED());
+        require(totalBalIn >= 512 && totalBalOut >= 512, MINIMUM_LIQUIDITY_EXCEEDED());
         require(
             totalBalXLong != 0 && totalBalYLong != 0 && totalBalXShort != 0 && totalBalYShort != 0,
             MINIMUM_LIQUIDITY_EXCEEDED()
