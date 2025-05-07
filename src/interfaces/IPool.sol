@@ -30,14 +30,15 @@ interface IPool {
         int24 activeId;
         int24 lowestId;
         int24 highestId;
-        // alm info
-        int24 oldActiveId;
         int24 tickX;
         int24 tickY;
-        uint48 targetTimestamp;
-        uint48 volatilityTimestamp;
-        uint8 volatilityLevel; // 1 means 'low', 2 means 'medium', 3 means 'high'
-        uint8 contraction; // 1 means false, 2 means true
+        // twab
+        int64 twabCumulative;
+        int64 last7daysCumulative;
+        // timestamp
+        uint32 lastBlockTimestamp;
+        uint32 last7daysTimestamp;
+        uint32 targetTimestamp;
         // pool initiator
         address initiator;
     }
