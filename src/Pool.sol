@@ -96,11 +96,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         int24 _lowestId = _activeId - 255;
         int24 _highestId = _activeId + 255;
+
         checkBinIdLimit(_lowestId);
         checkBinIdLimit(_highestId);
-        uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
 
+        uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
         int24 iteration = _activeId;
+
         while (iteration < _highestId) {
             iteration++;
             bins[iteration] = _binShare;
@@ -116,7 +118,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         int24 _tickX = (_activeId + _lowestId) >> 1; // midpoint,round down
         int24 _tickY = (_activeId + _highestId) >> 1; // midpoint,round down
-        uint48 _currentTimestamp = uint48(block.timestamp); // overflow is not realistic
 
         poolInfo = PoolInfo({
             tokenX: _tokenX,
@@ -132,13 +133,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             activeId: _activeId,
             lowestId: _lowestId,
             highestId: _highestId,
-            tickX: _tickX, 
-            tickY: _tickY, 
-            oldActiveId: _activeId,
-            targetTimestamp: _currentTimestamp + 24 days, // overflow is not realistic
-            volatilityTimestamp: _currentTimestamp, 
-            volatilityLevel: 1, // 1 means 'low', 2 means 'medium', 3 means 'high'
-            contraction: 2, // 1 means false, 2 means true
+            tickX: _tickX,
+            tickY: _tickY,
+            twabCumulative: 0, // initialize at 1st swap
+            last7daysCumulative: 0, //initialize at 1st swap
+            lastBlockTimestamp: 0, // initialize at 1st swap
+            last7daysTimestamp: 0, //initialize at 1st swap
+            targetTimestamp: 0, // initialize at 1st swap
             initiator: _initiator
         });
 
@@ -157,6 +158,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     {
         address sender = msg.sender;
         int24 binId = poolInfo.activeId;
+
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         uint256 amountX;
@@ -210,6 +212,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     {
         address sender = msg.sender;
         int24 binId = poolInfo.activeId;
+
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         uint256 balXLong = poolInfo.totalBalanceXLong;
@@ -315,6 +318,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
     }
 
+    function getTwabId() public view returns (int24 binId) {}
+
     function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
         external
         ensure(deadline)
@@ -324,47 +329,42 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
         int24 binId = poolInfo.activeId;
+        int24 newHighestId = poolInfo.highestId;
+        int24 newLowestId = poolInfo.lowestId;
+        uint32 _blockTimeStamp;
+        uint32 timeElapsed;
+        int64 addTwab;
 
-        uint56 currentVolatilityTimestamp = poolInfo.volatilityTimestamp;
-        int24 range = poolInfo.highestId - poolInfo.lowestId;
-        uint256 currentTimestamp = block.timestamp;
-
-        int24 oldActiveId = poolInfo.oldActiveId;
-        int24 tickX = poolInfo.tickX;
-        int24 tickY = poolInfo.tickY;
-        uint48 volatilityTimestamp = poolInfo.volatilityTimestamp;
-        uint48 targetTimestamp = poolInfo.targetTimestamp;
-        uint8 volatilityLevel = poolInfo.volatilityLevel;
-        uint8 contraction = poolInfo.contraction;
-
-        if (currentTimestamp - currentVolatilityTimestamp >= 255) {
-            // stay still
-            if (volatilityLevel == 2) {
-                contraction = 1;
-            }
-            // expansion
-            if (volatilityLevel == 3) {
-                if (range < 1022 && range > 62) {
-                    // expand here
-                    
-                }
-                oldActiveId = binId;
-                tickX = (binId + poolInfo.lowestId) >> 1;
-                tickY = (binId + poolInfo.highestId) >> 1;
-                volatilityTimestamp = uint48(currentTimestamp);
-                targetTimestamp = uint48(currentTimestamp + 24 days);
-                volatilityLevel = 1;
-                contraction = 2; // reset
-            }
+        // update twabCumulative and lastBlockTimestamp
+        unchecked {
+            _blockTimeStamp =
+                block.timestamp > type(uint32).max ? uint32(block.timestamp) : uint32(block.timestamp % 2 ** 32); // overflow is fine
+            timeElapsed = (_blockTimeStamp) - poolInfo.lastBlockTimestamp; // overflow is fine
+            addTwab = binId * int32(timeElapsed); // int32 is sufficient
+            if (timeElapsed != 0) poolInfo.twabCumulative += addTwab; // overflow is fine
+            poolInfo.lastBlockTimestamp = _blockTimeStamp;
         }
 
-        if (currentTimestamp >= poolInfo.targetTimestamp) {
-            if (contraction == 2) {
-                // shrink
+        if (poolInfo.targetTimestamp == 0) {
+            poolInfo.last7daysCumulative = addTwab;
+            poolInfo.last7daysTimestamp = _blockTimeStamp;
+            poolInfo.targetTimestamp = _blockTimeStamp + 7 days;
+        }
+
+        if (poolInfo.targetTimestamp != 0 && poolInfo.targetTimestamp <= _blockTimeStamp) {
+            // get twabId
+            int24 twabId = int24(
+                int256(poolInfo.twabCumulative + poolInfo.last7daysCumulative)
+                    / int256(uint256(poolInfo.last7daysTimestamp + _blockTimeStamp))
+            ); // overflow is unrealistic
+
+            if (twabId < poolInfo.tickX) {
+                //expand
+            } else if (twabId > poolInfo.tickY) {
+                //expand
             } else {
-                // stay still
+                //shrink
             }
-            // reset the rest info
         }
 
         uint256 totalBalXLong = poolInfo.totalBalanceXLong;
@@ -374,8 +374,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         uint256 totalBalX = totalBalXLong + totalBalXShort;
         uint256 totalBalY = totalBalYLong + totalBalYShort;
-        int24 newHighestId = poolInfo.highestId;
-        int24 newLowestId = poolInfo.lowestId;
 
         address tokenIn;
         address tokenOut;
@@ -440,32 +438,53 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y in poolInfo
 
             bins[binId] = binShareIn; // add to new bin
-            uint256 adjustedBinShare;
+            uint256 adjustedBinShareOut;
             if (xInYOut) {
                 binId++;
                 if (newHighestId < 44405) {
-                    adjustedBinShare = (bins[binId] + bins[newHighestId]) >> 1;
+                    adjustedBinShareOut = (bins[binId] + bins[newHighestId]) >> 1;
                     newHighestId++;
-                    bins[newHighestId] = adjustedBinShare;
-                    totalBinShareOut += adjustedBinShare;
-                }
-                if (binId - newLowestId > newHighestId - binId) {
-                    totalBinShareIn -= bins[newLowestId];
-                    newLowestId++;
+                    bins[newHighestId] = adjustedBinShareOut;
+                    totalBinShareOut += adjustedBinShareOut;
+
+                    uint256 adjustedBinShareInEquivalent =
+                        PriceMath.fullMulDiv(adjustedBinShareOut, binShareInGain, usedBinShareOut);
+                    uint256 newLowestIdBinShare = bins[newLowestId];
+
+                    if (binId - newLowestId > newHighestId - binId) {
+                        if (adjustedBinShareInEquivalent >= newLowestIdBinShare) {
+                            adjustedBinShareInEquivalent = newLowestIdBinShare;
+                            newLowestId++;
+                        } else {
+                            bins[newLowestId] = newLowestIdBinShare - adjustedBinShareInEquivalent;
+                        }
+                        totalBinShareIn -= adjustedBinShareInEquivalent;
+                    }
                 }
             } else {
                 binId--;
                 if (newLowestId > -44405) {
-                    adjustedBinShare = (bins[binId] + bins[newLowestId]) >> 1;
+                    adjustedBinShareOut = (bins[binId] + bins[newLowestId]) >> 1;
                     newLowestId--;
-                    bins[newLowestId] = adjustedBinShare;
-                    totalBinShareOut += adjustedBinShare;
-                }
-                if (newHighestId - binId > binId - newLowestId) {
-                    totalBinShareIn -= bins[newHighestId];
-                    newHighestId--;
+                    bins[newLowestId] = adjustedBinShareOut;
+                    totalBinShareOut += adjustedBinShareOut;
+
+                    uint256 adjustedBinShareInEquivalent =
+                        PriceMath.fullMulDiv(adjustedBinShareOut, binShareInGain, usedBinShareOut);
+                    uint256 newHighestIdBinShare = bins[newHighestId];
+
+                    if (newHighestId - binId > binId - newLowestId) {
+                        if (adjustedBinShareInEquivalent >= newHighestIdBinShare) {
+                            adjustedBinShareInEquivalent = newHighestIdBinShare;
+                            newHighestId--;
+                        } else {
+                            bins[newHighestId] = newHighestIdBinShare - adjustedBinShareInEquivalent;
+                        }
+                        totalBinShareIn -= adjustedBinShareInEquivalent;
+                    }
                 }
             }
+
             binShareIn = 0;
             binShareOut = bins[binId];
 
@@ -487,7 +506,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         checkBinIdLimit(binId);
-        require(totalBalIn >= 512 && totalBalOut >= 512, MINIMUM_LIQUIDITY_EXCEEDED());
+        require(totalBalOut > 511, MINIMUM_LIQUIDITY_EXCEEDED());
         require(
             totalBalXLong != 0 && totalBalYLong != 0 && totalBalXShort != 0 && totalBalYShort != 0,
             MINIMUM_LIQUIDITY_EXCEEDED()
