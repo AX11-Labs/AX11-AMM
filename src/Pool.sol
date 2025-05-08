@@ -331,24 +331,31 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 binId = poolInfo.activeId;
         int24 newHighestId = poolInfo.highestId;
         int24 newLowestId = poolInfo.lowestId;
-        uint32 _blockTimeStamp;
-        uint32 timeElapsed;
-        int64 addTwab;
+        uint32 _blockTimeStamp = uint32(block.timestamp); // overflow is far away (year 2106)
+        uint32 timeElapsed = (_blockTimeStamp) - poolInfo.lastBlockTimestamp; // overflow is unrealistic
+        int64 newTwab;
 
         // update twabCumulative and lastBlockTimestamp
-        unchecked {
-            _blockTimeStamp =
-                block.timestamp > type(uint32).max ? uint32(block.timestamp) : uint32(block.timestamp % 2 ** 32); // overflow is fine
-            timeElapsed = (_blockTimeStamp) - poolInfo.lastBlockTimestamp; // overflow is fine
-            addTwab = binId * int32(timeElapsed); // int32 is sufficient
-            if (timeElapsed != 0) poolInfo.twabCumulative += addTwab; // overflow is fine
+        if (timeElapsed != 0) {
+            newTwab = binId * int32(timeElapsed); // overflow is unrealistic,
+            poolInfo.twabCumulative += newTwab; // overflow is unrealistic
             poolInfo.lastBlockTimestamp = _blockTimeStamp;
-        }
-
-        if (poolInfo.targetTimestamp == 0) {
-            poolInfo.last7daysCumulative = addTwab;
-            poolInfo.last7daysTimestamp = _blockTimeStamp;
-            poolInfo.targetTimestamp = _blockTimeStamp + 7 days;
+            if (poolInfo.targetTimestamp == 0) {
+                poolInfo.last7daysCumulative = newTwab; // initialize
+                poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
+                poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
+            } else if (poolInfo.targetTimestamp <= _blockTimeStamp) {
+                // 1.update the 7 days oracle
+                // get twab before and after the 7 days
+                int24 last7daysTwab = int24(
+                    (poolInfo.twabCumulative - poolInfo.last7daysCumulative)
+                        / int32(_blockTimeStamp - poolInfo.last7daysTimestamp)
+                ); // overflow is unrealistic
+                poolInfo.last7daysCumulative = poolInfo.twabCumulative;
+                poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
+                poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
+                    // TODO: 2.range expansion and contraction should be done here, based on last7daysTwab
+            }
         }
 
         if (poolInfo.targetTimestamp != 0 && poolInfo.targetTimestamp <= _blockTimeStamp) {
