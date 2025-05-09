@@ -225,32 +225,39 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         uint256 amountDeducted;
 
+        uint256 feeX;
+        uint256 feeY;
+
         if (option.amountForLongX != 0) {
             amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForLongX, balXLong, _totalSupply.longX); // overflow is not realistic, _totalSupply can't be 0.
-            balXLong -= amountDeducted;
-            amountX += amountDeducted;
-            require(balXLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            feeX = FeeTier.getFee(uint24(binId - poolInfo.lowestId), amountDeducted);
+            balXLong -= (amountDeducted - feeX);
+            amountX += (amountDeducted - feeX);
+            require(balXLong != 0, INSUFFICIENT_LIQUIDITY());
             poolInfo.totalBalanceXLong = balXLong.safe128();
         }
         if (option.amountForLongY != 0) {
             amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForLongY, balYLong, _totalSupply.longY); // overflow is not realistic, _totalSupply can't be 0.
-            balYLong -= amountDeducted;
-            amountY += amountDeducted;
-            require(balYLong != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            feeY = FeeTier.getFee(uint24(poolInfo.highestId - binId), amountDeducted);
+            balYLong -= (amountDeducted - feeY);
+            amountY += (amountDeducted - feeY);
+            require(balYLong != 0, INSUFFICIENT_LIQUIDITY());
             poolInfo.totalBalanceYLong = balYLong.safe128();
         }
         if (option.amountForShortX != 0) {
             amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForShortX, balXShort, _totalSupply.shortX); // overflow is not realistic, _totalSupply can't be 0.
-            balXShort -= amountDeducted;
-            amountX += amountDeducted;
-            require(balXShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            feeX = FeeTier.getFee(uint24(binId - poolInfo.lowestId), amountDeducted);
+            balXShort -= (amountDeducted - feeX);
+            amountX += (amountDeducted - feeX);
+            require(balXShort != 0, INSUFFICIENT_LIQUIDITY());
             poolInfo.totalBalanceXShort = balXShort.safe128();
         }
         if (option.amountForShortY != 0) {
             amountDeducted = PriceMath.fullMulDivUnchecked(option.amountForShortY, balYShort, _totalSupply.shortY); // overflow is not realistic, _totalSupply can't be 0.
-            balYShort -= amountDeducted;
-            amountY += amountDeducted;
-            require(balYShort != 0, MINIMUM_LIQUIDITY_EXCEEDED());
+            feeY = FeeTier.getFee(uint24(poolInfo.highestId - binId), amountDeducted);
+            balYShort -= (amountDeducted - feeY);
+            amountY += (amountDeducted - feeY);
+            require(balYShort != 0, INSUFFICIENT_LIQUIDITY());
             poolInfo.totalBalanceYShort = balYShort.safe128();
         }
 
@@ -333,11 +340,10 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 newLowestId = poolInfo.lowestId;
         uint32 _blockTimeStamp = uint32(block.timestamp); // overflow is far away (year 2106)
         uint32 timeElapsed = (_blockTimeStamp) - poolInfo.lastBlockTimestamp; // overflow is unrealistic
-        int64 newTwab;
 
         // update oracle
         if (timeElapsed != 0) {
-            newTwab = binId * int32(timeElapsed); // overflow is unrealistic,
+            int64 newTwab = binId * int32(timeElapsed); // overflow is unrealistic,
             poolInfo.twabCumulative += newTwab; // overflow is unrealistic
             poolInfo.lastBlockTimestamp = _blockTimeStamp;
 
@@ -357,6 +363,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
                 // range expansion and contraction
                 int24 oldRange = newHighestId - newLowestId;
+                int24 newRange;
                 if (last7daysTwab < poolInfo.tickX) {
                     //expand towards lower id
                     int24 oldLowestId = newLowestId;
@@ -364,7 +371,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     if (last7daysTwab - newLowestId > 255) newLowestId += last7daysTwab - newLowestId - 255;
                     if (newLowestId < -44405) newLowestId = -44405;
 
-                    int24 newRange = newHighestId - newLowestId;
+                    newRange = newHighestId - newLowestId;
 
                     if (newRange > oldRange) {
                         uint256 oldTotalBinShareX = poolInfo.totalBinShareX;
@@ -385,7 +392,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     if (newHighestId - last7daysTwab > 255) newHighestId -= newHighestId - last7daysTwab - 255;
                     if (newHighestId > 44405) newHighestId = 44405;
 
-                    int24 newRange = newHighestId - newLowestId;
+                    newRange = newHighestId - newLowestId;
 
                     if (newRange > oldRange) {
                         uint256 oldTotalBinShareY = poolInfo.totalBinShareY;
@@ -403,13 +410,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     //contract
                     int24 contractionSpaceX = last7daysTwab - poolInfo.tickX;
                     int24 contractionSpaceY = poolInfo.tickY - last7daysTwab;
-                    int24 minSpace = contractionSpaceX < contractionSpaceY ? contractionSpaceX : contractionSpaceY;
-                    minSpace >>= 1;
-                    if (minSpace > 0) {
+                    newRange = contractionSpaceX < contractionSpaceY ? contractionSpaceX : contractionSpaceY;
+                    newRange >>= 1;
+                    if (newRange > 0) {
                         int24 oldLowestId = newLowestId;
                         int24 oldHighestId = newHighestId;
-                        newLowestId += minSpace;
-                        newHighestId -= minSpace;
+                        newLowestId += newRange;
+                        newHighestId -= newRange;
 
                         if (newHighestId < last7daysTwab + 15) newHighestId = last7daysTwab + 15;
                         if (newLowestId > last7daysTwab - 15) newLowestId = last7daysTwab - 15;
@@ -432,6 +439,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                         poolInfo.totalBinShareY -= binShareYToRemove;
                     }
                 }
+                poolInfo.tickX = (last7daysTwab + newLowestId) >> 1;
+                poolInfo.tickY = (last7daysTwab + newHighestId) >> 1;
             }
         }
 
@@ -473,7 +482,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-
+        uint256 originalAmountIn = amountIn;
         uint256 binAmountOut = PriceMath.fullMulDivUnchecked(totalBalOut, binShareOut, totalBinShareOut); // overflow is not realistic
         (uint256 maxAmountIn, uint256 price) = _getAmountInFromBin(xInYOut, binId, binAmountOut);
         uint256 usedBinShareOut;
@@ -560,24 +569,55 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             (maxAmountIn, price) = _getAmountInFromNextBin(xInYOut, price, binAmountOut);
         }
 
-        /// @dev update pool storage after the loop
+        // calculate fee
+        uint256 feeOut = xInYOut
+            ? FeeTier.getFee(uint24(newHighestId - binId), amountOut)
+            : FeeTier.getFee(uint24(binId - newLowestId), amountOut);
+        uint256 feeIn = PriceMath.fullMulDivUnchecked(originalAmountIn, feeOut, amountOut);
+
+        // get new token balances for lp
         if (xInYOut) {
             totalBalXLong = PriceMath.fullMulDivUnchecked(totalBalIn, totalBalXLong, totalBalX); // overflow is not realistic
             totalBalXShort = totalBalIn - totalBalXLong;
+            if (totalBalXLong > feeIn + 512) {
+                totalBalXLong -= feeIn;
+                totalBalXShort += feeIn;
+            }
+
             totalBalYLong = PriceMath.fullMulDivUnchecked(totalBalOut, totalBalYLong, totalBalY); // overflow is not realistic
             totalBalYShort = totalBalOut - totalBalYLong;
+            if (totalBalYShort > feeOut + 512) {
+                totalBalYShort -= feeOut;
+                totalBalYLong += feeOut << 1;
+            } else {
+                totalBalYLong += feeOut;
+            }
         } else {
             totalBalYLong = PriceMath.fullMulDivUnchecked(totalBalIn, totalBalYLong, totalBalY); // overflow is not realistic
             totalBalYShort = totalBalIn - totalBalYLong;
+            if (totalBalYLong > feeIn + 512) {
+                totalBalYLong -= feeIn;
+                totalBalYShort += feeIn;
+            }
+
             totalBalXLong = PriceMath.fullMulDivUnchecked(totalBalOut, totalBalXLong, totalBalX); // overflow is not realistic
             totalBalXShort = totalBalOut - totalBalXLong;
+            if (totalBalXShort > feeOut + 512) {
+                totalBalXShort -= feeOut;
+                totalBalXLong += feeOut << 1;
+            } else {
+                totalBalXLong += feeOut;
+            }
         }
 
+        totalBalOut += feeOut;
+        amountOut -= feeOut;
+
         checkBinIdLimit(binId);
-        require(totalBalOut > 511, MINIMUM_LIQUIDITY_EXCEEDED());
+        require(totalBalOut > 511, INSUFFICIENT_LIQUIDITY());
         require(
             totalBalXLong != 0 && totalBalYLong != 0 && totalBalXShort != 0 && totalBalYShort != 0,
-            MINIMUM_LIQUIDITY_EXCEEDED()
+            INSUFFICIENT_LIQUIDITY()
         );
 
         poolInfo.totalBalanceXLong = totalBalXLong.safe128();
@@ -591,12 +631,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo.activeId = binId;
         poolInfo.lowestId = newLowestId;
         poolInfo.highestId = newHighestId;
-        /// TODO: should also update priceInfo here ...............
-        // TODO: also dont forget to incorporate fee into calculation, short and long balance must change
 
         require(amountOut >= minAmountOut, SLIPPAGE_EXCEEDED());
         TransferHelper.safeTransfer(tokenOut, recipient, amountOut);
-
-        //TODO: uint24 range = uint24(_priceInfo.highestId - _priceInfo.lowestId + 1); // we will come back to fix this because highestId and lowestId can be updated
     }
 }
