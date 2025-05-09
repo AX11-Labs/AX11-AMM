@@ -335,18 +335,18 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint32 timeElapsed = (_blockTimeStamp) - poolInfo.lastBlockTimestamp; // overflow is unrealistic
         int64 newTwab;
 
-        // update twabCumulative and lastBlockTimestamp
+        // update oracle
         if (timeElapsed != 0) {
             newTwab = binId * int32(timeElapsed); // overflow is unrealistic,
             poolInfo.twabCumulative += newTwab; // overflow is unrealistic
             poolInfo.lastBlockTimestamp = _blockTimeStamp;
+
             if (poolInfo.targetTimestamp == 0) {
                 poolInfo.last7daysCumulative = newTwab; // initialize
                 poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
                 poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
             } else if (poolInfo.targetTimestamp <= _blockTimeStamp) {
-                // 1.update the 7 days oracle
-                // get twab before and after the 7 days
+                // update the 7 days twab
                 int24 last7daysTwab = int24(
                     (poolInfo.twabCumulative - poolInfo.last7daysCumulative)
                         / int32(_blockTimeStamp - poolInfo.last7daysTimestamp)
@@ -354,23 +354,84 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                 poolInfo.last7daysCumulative = poolInfo.twabCumulative;
                 poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
                 poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
-                    // TODO: 2.range expansion and contraction should be done here, based on last7daysTwab
-            }
-        }
 
-        if (poolInfo.targetTimestamp != 0 && poolInfo.targetTimestamp <= _blockTimeStamp) {
-            // get twabId
-            int24 twabId = int24(
-                int256(poolInfo.twabCumulative + poolInfo.last7daysCumulative)
-                    / int256(uint256(poolInfo.last7daysTimestamp + _blockTimeStamp))
-            ); // overflow is unrealistic
+                // range expansion and contraction
+                int24 oldRange = newHighestId - newLowestId;
+                if (last7daysTwab < poolInfo.tickX) {
+                    //expand towards lower id
+                    int24 oldLowestId = newLowestId;
+                    newLowestId -= (poolInfo.tickX - last7daysTwab) >> 1;
+                    if (last7daysTwab - newLowestId > 255) newLowestId += last7daysTwab - newLowestId - 255;
+                    if (newLowestId < -44405) newLowestId = -44405;
 
-            if (twabId < poolInfo.tickX) {
-                //expand
-            } else if (twabId > poolInfo.tickY) {
-                //expand
-            } else {
-                //shrink
+                    int24 newRange = newHighestId - newLowestId;
+
+                    if (newRange > oldRange) {
+                        uint256 oldTotalBinShareX = poolInfo.totalBinShareX;
+                        uint256 newTotalBinShareX =
+                            PriceMath.fullMulDivUnchecked(oldTotalBinShareX, uint24(newRange), uint24(oldRange)); // overflow is unrealistic
+                        uint256 addBinShareXPerBin =
+                            (newTotalBinShareX - oldTotalBinShareX) / uint24(newRange - oldRange);
+                        while (oldLowestId > newLowestId) {
+                            oldLowestId--;
+                            bins[oldLowestId] = addBinShareXPerBin;
+                        }
+                        poolInfo.totalBinShareX = newTotalBinShareX;
+                    }
+                } else if (last7daysTwab > poolInfo.tickY) {
+                    //expand towards higher id
+                    int24 oldHighestId = newHighestId;
+                    newHighestId += (last7daysTwab - poolInfo.tickY) >> 1;
+                    if (newHighestId - last7daysTwab > 255) newHighestId -= newHighestId - last7daysTwab - 255;
+                    if (newHighestId > 44405) newHighestId = 44405;
+
+                    int24 newRange = newHighestId - newLowestId;
+
+                    if (newRange > oldRange) {
+                        uint256 oldTotalBinShareY = poolInfo.totalBinShareY;
+                        uint256 newTotalBinShareY =
+                            PriceMath.fullMulDivUnchecked(oldTotalBinShareY, uint24(newRange), uint24(oldRange)); // overflow is unrealistic
+                        uint256 addBinShareYPerBin =
+                            (newTotalBinShareY - oldTotalBinShareY) / uint24(newRange - oldRange);
+                        while (oldHighestId < newHighestId) {
+                            oldHighestId++;
+                            bins[oldHighestId] = addBinShareYPerBin;
+                        }
+                        poolInfo.totalBinShareY = newTotalBinShareY;
+                    }
+                } else {
+                    //contract
+                    int24 contractionSpaceX = last7daysTwab - poolInfo.tickX;
+                    int24 contractionSpaceY = poolInfo.tickY - last7daysTwab;
+                    int24 minSpace = contractionSpaceX < contractionSpaceY ? contractionSpaceX : contractionSpaceY;
+                    minSpace >>= 1;
+                    if (minSpace > 0) {
+                        int24 oldLowestId = newLowestId;
+                        int24 oldHighestId = newHighestId;
+                        newLowestId += minSpace;
+                        newHighestId -= minSpace;
+
+                        if (newHighestId < last7daysTwab + 15) newHighestId = last7daysTwab + 15;
+                        if (newLowestId > last7daysTwab - 15) newLowestId = last7daysTwab - 15;
+                        if (newLowestId < -44405) newLowestId = -44405;
+                        if (newHighestId > 44405) newHighestId = 44405;
+
+                        uint256 binShareXToRemove;
+                        uint256 binShareYToRemove;
+
+                        while (oldHighestId > newHighestId) {
+                            binShareYToRemove += bins[oldHighestId];
+                            oldHighestId--;
+                        }
+
+                        while (oldLowestId < newLowestId) {
+                            binShareXToRemove += bins[oldLowestId];
+                            oldLowestId++;
+                        }
+                        poolInfo.totalBinShareX -= binShareXToRemove;
+                        poolInfo.totalBinShareY -= binShareYToRemove;
+                    }
+                }
             }
         }
 
