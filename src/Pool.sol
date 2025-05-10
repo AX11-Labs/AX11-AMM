@@ -368,7 +368,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     //expand towards lower id
                     int24 oldLowestId = newLowestId;
                     newLowestId -= (poolInfo.tickX - last7daysTwab) >> 1;
-                    if (last7daysTwab - newLowestId > 255) newLowestId += last7daysTwab - newLowestId - 255;
+                    if (binId - newLowestId > 255) newLowestId += binId - newLowestId - 255;
                     if (newLowestId < -44405) newLowestId = -44405;
 
                     newRange = newHighestId - newLowestId;
@@ -384,12 +384,14 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                             bins[oldLowestId] = addBinShareXPerBin;
                         }
                         poolInfo.totalBinShareX = newTotalBinShareX;
+                    } else {
+                        newLowestId = oldLowestId;
                     }
                 } else if (last7daysTwab > poolInfo.tickY) {
                     //expand towards higher id
                     int24 oldHighestId = newHighestId;
                     newHighestId += (last7daysTwab - poolInfo.tickY) >> 1;
-                    if (newHighestId - last7daysTwab > 255) newHighestId -= newHighestId - last7daysTwab - 255;
+                    if (newHighestId - binId > 255) newHighestId -= newHighestId - binId - 255;
                     if (newHighestId > 44405) newHighestId = 44405;
 
                     newRange = newHighestId - newLowestId;
@@ -405,6 +407,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                             bins[oldHighestId] = addBinShareYPerBin;
                         }
                         poolInfo.totalBinShareY = newTotalBinShareY;
+                    } else {
+                        newHighestId = oldHighestId;
                     }
                 } else {
                     //contract
@@ -418,29 +422,36 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                         newLowestId += newRange;
                         newHighestId -= newRange;
 
-                        if (newHighestId < last7daysTwab + 15) newHighestId = last7daysTwab + 15;
-                        if (newLowestId > last7daysTwab - 15) newLowestId = last7daysTwab - 15;
+                        if (newHighestId < binId + 15) newHighestId = binId + 15;
+                        if (newLowestId > binId - 15) newLowestId = binId - 15;
                         if (newLowestId < -44405) newLowestId = -44405;
                         if (newHighestId > 44405) newHighestId = 44405;
 
-                        uint256 binShareXToRemove;
-                        uint256 binShareYToRemove;
-
-                        while (oldHighestId > newHighestId) {
-                            binShareYToRemove += bins[oldHighestId];
-                            oldHighestId--;
+                        if (oldHighestId > newHighestId) {
+                            uint256 binShareYToRemove;
+                            while (oldHighestId > newHighestId) {
+                                binShareYToRemove += bins[oldHighestId];
+                                oldHighestId--;
+                            }
+                            poolInfo.totalBinShareY -= binShareYToRemove;
+                        } else {
+                            newHighestId = oldHighestId;
                         }
 
-                        while (oldLowestId < newLowestId) {
-                            binShareXToRemove += bins[oldLowestId];
-                            oldLowestId++;
+                        if (oldLowestId < newLowestId) {
+                            uint256 binShareXToRemove;
+                            while (oldLowestId < newLowestId) {
+                                binShareXToRemove += bins[oldLowestId];
+                                oldLowestId++;
+                            }
+                            poolInfo.totalBinShareX -= binShareXToRemove;
+                        } else {
+                            newLowestId = oldLowestId;
                         }
-                        poolInfo.totalBinShareX -= binShareXToRemove;
-                        poolInfo.totalBinShareY -= binShareYToRemove;
                     }
                 }
-                poolInfo.tickX = (last7daysTwab + newLowestId) >> 1;
-                poolInfo.tickY = (last7daysTwab + newHighestId) >> 1;
+                poolInfo.tickX = (binId + newLowestId) >> 1;
+                poolInfo.tickY = (binId + newHighestId) >> 1;
             }
         }
 
