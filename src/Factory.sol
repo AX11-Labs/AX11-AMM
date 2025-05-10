@@ -26,12 +26,7 @@ contract Factory is IFactory, NoDelegateCall {
         noDelegateCall
         returns (address pool)
     {
-        if (tokenX == tokenY) {
-            revert INVALID_ADDRESS();
-        } else if (tokenX > tokenY) {
-            (tokenX, tokenY) = (tokenY, tokenX);
-        }
-
+        require(tokenX < tokenY, INVALID_ADDRESS()); // required pre-sorting of tokens
         require(getPool[tokenX][tokenY] == address(0), CREATED());
 
         string memory _name =

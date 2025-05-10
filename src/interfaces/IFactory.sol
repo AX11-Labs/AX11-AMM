@@ -8,7 +8,7 @@ interface IFactory {
     /// @notice Error thrown when the caller is not the owner
     error NOT_OWNER();
 
-    /// @notice Error thrown when an invalid address is provided (zero address or identical tokens)
+    /// @notice Error thrown when an invalid address is provided (zero address, identical tokens, or tokens are not sorted)
     error INVALID_ADDRESS();
 
     /// @notice Error thrown when attempting to create a pool that already exists
