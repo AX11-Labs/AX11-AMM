@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.28;
 
-import {Constants} from "../Constants.sol";
 /**
  * @title Uint128x128 Math Library derived from Trader Joe's Uint128x128Math
  * @author Trader Joe
@@ -18,10 +17,11 @@ library Uint128x128Math {
      * @param y A relative number without any decimals, needs to be between ]2^21; 2^21[
      */
     function pow(uint256 x, int256 y) internal pure returns (uint256 result) {
+        uint256 scale = 340622649287859401926837982039199979667;
         bool invert;
         uint256 absY;
 
-        if (y == 0) return Constants.SCALE;
+        if (y == 0) return scale;
 
         assembly {
             absY := y
@@ -32,7 +32,7 @@ library Uint128x128Math {
         }
 
         if (absY < 0x100000) {
-            result = Constants.SCALE;
+            result = scale;
             assembly {
                 let squared := x
                 if gt(x, 0xffffffffffffffffffffffffffffffff) {
@@ -40,45 +40,85 @@ library Uint128x128Math {
                     invert := iszero(invert)
                 }
 
-                if and(absY, 0x1) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x1) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x2) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x2) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x4) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x4) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x8) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x8) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x10) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x10) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x20) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x20) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x40) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x40) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x80) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x80) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x100) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x100) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x200) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x200) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x400) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x400) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x800) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x800) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x1000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x1000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x2000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x2000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x4000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x4000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x8000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x8000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x10000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x10000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x20000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x20000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x40000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x40000) {
+                    result := shr(128, mul(result, squared))
+                }
                 squared := shr(128, mul(squared, squared))
-                if and(absY, 0x80000) { result := shr(128, mul(result, squared)) }
+                if and(absY, 0x80000) {
+                    result := shr(128, mul(result, squared))
+                }
             }
         }
 
