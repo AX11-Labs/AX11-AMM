@@ -66,7 +66,6 @@ interface IPool {
 
     function factory() external view returns (address);
     function getPoolInfo() external view returns (PoolInfo memory);
-    function setInitiator(address _initiator) external;
     function mint(
         LiquidityOption calldata option
     ) external returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
