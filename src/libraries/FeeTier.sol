@@ -19,9 +19,11 @@ library FeeTier {
             // tier = y0 + (x - x0) * (y1 - y0) / (x1 - x0)
             // tier = minFee + (priceRange - priceRangeAtMinFee) * (maxFee - minFee) / (priceRangeAtMaxFee - priceRangeAtMinFee)
             // Perform calculations using uint256 for intermediate products to prevent overflow, then cast to uint16.
-            tier = minFee
-                + uint8(
-                    (((priceRange - priceRangeAtMinFee) * (maxFee - minFee)) / (priceRangeAtMaxFee - priceRangeAtMinFee))
+            tier =
+                minFee +
+                uint8(
+                    (((priceRange - priceRangeAtMinFee) * (maxFee - minFee)) /
+                        (priceRangeAtMaxFee - priceRangeAtMinFee))
                 ); // won't overflow
         }
         feeAmount = ((value * tier) / 100_000);

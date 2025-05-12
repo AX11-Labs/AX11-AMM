@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.28;
 
-import {IAx11Lp} from "../interfaces/IAx11Lp.sol";
+import {IAx11Lp} from '../interfaces/IAx11Lp.sol';
 
 /**
  * @title Ax11Lp
@@ -119,10 +119,14 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transferFrom(address from, address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
-        public
-        returns (bool)
-    {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 longX,
+        uint256 longY,
+        uint256 shortX,
+        uint256 shortY
+    ) public returns (bool) {
         require(to != address(this), INVALID_ADDRESS());
         require(allowance[from][msg.sender] >= block.timestamp, INSUFFICIENT_ALLOWANCE());
 
@@ -159,11 +163,15 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @param r Half of the ECDSA signature pair
     /// @param s Half of the ECDSA signature pair
     /// @return A boolean indicating whether the operation succeeded
-    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
-        public
-        override
-        returns (bool)
-    {
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public override returns (bool) {
         require(deadline >= block.timestamp, EXPIRED());
         // Unchecked because the only math done is incrementing
         // the owner's nonce which cannot realistically overflow.
@@ -171,12 +179,12 @@ abstract contract Ax11Lp is IAx11Lp {
             address recoveredAddress = ecrecover(
                 keccak256(
                     abi.encodePacked(
-                        "\x19\x01",
+                        '\x19\x01',
                         DOMAIN_SEPARATOR(),
                         keccak256(
                             abi.encode(
                                 keccak256(
-                                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+                                    'Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)'
                                 ),
                                 owner,
                                 spender,
@@ -209,15 +217,16 @@ abstract contract Ax11Lp is IAx11Lp {
     /// @notice Computes the domain separator for permit functionality
     /// @return The computed domain separator
     function computeDomainSeparator() private view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f, //keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-                keccak256(bytes(name)),
-                0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6, //keccak256("1")
-                block.chainid,
-                address(this)
-            )
-        );
+        return
+            keccak256(
+                abi.encode(
+                    0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f, //keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+                    keccak256(bytes(name)),
+                    0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6, //keccak256("1")
+                    block.chainid,
+                    address(this)
+                )
+            );
     }
 
     /*//////////////////////////////////////////////////////////////

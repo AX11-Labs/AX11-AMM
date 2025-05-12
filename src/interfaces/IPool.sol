@@ -39,8 +39,16 @@ interface IPool {
         uint32 lastBlockTimestamp;
         uint32 last7daysTimestamp;
         uint32 targetTimestamp;
-        // pool initiator
-        address initiator;
+        // groupBin
+        int24 groupBinXFrom;
+        int24 groupBinXTo;
+        int24 groupBinYFrom;
+        int24 groupBinYTo;
+        int24 expandFrom;
+        int24 expandTo;
+        uint256 groupBinXShare;
+        uint256 groupBinYShare;
+        uint256 expandShare;
     }
 
     // ---------- Function input struct ----------
@@ -59,8 +67,8 @@ interface IPool {
     function factory() external view returns (address);
     function getPoolInfo() external view returns (PoolInfo memory);
     function setInitiator(address _initiator) external;
-    function mint(LiquidityOption calldata option)
-        external
-        returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
+    function mint(
+        LiquidityOption calldata option
+    ) external returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
     function burn(LiquidityOption calldata option) external returns (uint256 amountX, uint256 amountY);
 }
