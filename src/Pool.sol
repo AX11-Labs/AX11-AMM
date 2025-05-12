@@ -1,20 +1,20 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.8.28;
 
-import {Ax11Lp} from "./abstracts/Ax11Lp.sol";
-import {IPool} from "./interfaces/IPool.sol";
-import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {ReentrancyGuard} from "./abstracts/ReentrancyGuard.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
-import {Deadline} from "./abstracts/Deadline.sol";
-import {PriceMath} from "./libraries/PriceMath.sol";
-import {Uint256x256Math} from "./libraries/Math/Uint256x256Math.sol";
-import {Uint128x128Math} from "./libraries/Math/Uint128x128Math.sol";
-import {FeeTier} from "./libraries/FeeTier.sol";
-import {SafeCast} from "./libraries/Math/SafeCast.sol";
-import {NoDelegateCall} from "./abstracts/NoDelegateCall.sol";
-import {IAx11FlashCallback} from "./interfaces/IAx11FlashCallback.sol";
+import {Ax11Lp} from './abstracts/Ax11Lp.sol';
+import {IPool} from './interfaces/IPool.sol';
+import {TransferHelper} from './libraries/TransferHelper.sol';
+import {ReentrancyGuard} from './abstracts/ReentrancyGuard.sol';
+import {IERC20} from './interfaces/IERC20.sol';
+import {Deadline} from './abstracts/Deadline.sol';
+import {PriceMath} from './libraries/PriceMath.sol';
+import {Uint256x256Math} from './libraries/Math/Uint256x256Math.sol';
+import {Uint128x128Math} from './libraries/Math/Uint128x128Math.sol';
+import {FeeTier} from './libraries/FeeTier.sol';
+import {SafeCast} from './libraries/Math/SafeCast.sol';
+import {NoDelegateCall} from './abstracts/NoDelegateCall.sol';
+import {IAx11FlashCallback} from './interfaces/IAx11FlashCallback.sol';
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
@@ -24,6 +24,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     address public immutable override factory;
 
     PoolInfo private poolInfo;
+
+    // forgefmt: disable-next-line
+    //uint256 transient tempValue;
 
     constructor(
         address _tokenX,
@@ -41,11 +44,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         return poolInfo;
     }
 
-    function setInitiator(address _initiator) external override {
-        require(msg.sender == poolInfo.initiator, INVALID_ADDRESS());
-        poolInfo.initiator = _initiator;
-    }
-
     function checkBinIdLimit(int24 value) private pure {
         require(value >= -44405 && value <= 44405, INVALID_BIN_ID());
     }
@@ -54,28 +52,29 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     function getBase() private pure returns (uint256) {
         return 340962931654780340390301356646631747878;
     }
+
     /// @notice EXCLUDING FEE
     /// @notice This is only for calculating the amountIn within a single bin.
 
-    function _getAmountInFromBin(bool xInYOut, int24 binId, uint256 balance)
-        private
-        pure
-        returns (uint256 maxAmountIn, uint256 price)
-    {
+    function _getAmountInFromBin(
+        bool xInYOut,
+        int24 binId,
+        uint256 balance
+    ) private pure returns (uint256 maxAmountIn, uint256 price) {
         price = Uint128x128Math.pow(getBase(), binId);
         maxAmountIn = xInYOut
-            ? Uint256x256Math.shiftDivRoundUp(balance, 128, price) // getBase().pow(binId) = price128.128
-            : Uint256x256Math.mulShiftRoundUp(balance, price, 128); // getBase().pow(binId) = price128.128
+            ? Uint256x256Math.shiftDivRoundUp(balance, 128, price)
+            : Uint256x256Math.mulShiftRoundUp(balance, price, 128);
     }
 
     /// @notice This function is used to calculate the amountIn for the next bin
     /// the previous price should be dervied from `_getAmountInFromBin`
     /// this will save gas by not calculating the price with pow() again
-    function _getAmountInFromNextBin(bool xInYOut, uint256 previousPrice, uint256 balance)
-        private
-        pure
-        returns (uint256 maxAmountIn, uint256 price)
-    {
+    function _getAmountInFromNextBin(
+        bool xInYOut,
+        uint256 previousPrice,
+        uint256 balance
+    ) private pure returns (uint256 maxAmountIn, uint256 price) {
         if (xInYOut) {
             price = ((previousPrice * 1002) / 1000);
             maxAmountIn = Uint256x256Math.shiftDivRoundUp(balance, 128, price);
@@ -119,36 +118,30 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 _tickX = (_activeId + _lowestId) >> 1; // midpoint,round down
         int24 _tickY = (_activeId + _highestId) >> 1; // midpoint,round down
 
-        poolInfo = PoolInfo({
-            tokenX: _tokenX,
-            tokenY: _tokenY,
-            totalBalanceXLong: 256,
-            totalBalanceYLong: 256,
-            totalBalanceXShort: 256,
-            totalBalanceYShort: 256,
-            totalBinShareX: _tokenShare,
-            totalBinShareY: _tokenShare,
-            activeBinShareX: _binShare,
-            activeBinShareY: _binShare,
-            activeId: _activeId,
-            lowestId: _lowestId,
-            highestId: _highestId,
-            tickX: _tickX,
-            tickY: _tickY,
-            twabCumulative: 0, // initialize at 1st swap
-            last7daysCumulative: 0, //initialize at 1st swap
-            lastBlockTimestamp: 0, // initialize at 1st swap
-            last7daysTimestamp: 0, //initialize at 1st swap
-            targetTimestamp: 0, // initialize at 1st swap
-            initiator: _initiator
-        });
+        poolInfo.tokenX = _tokenX;
+        poolInfo.tokenY = _tokenY;
+        poolInfo.totalBalanceXLong = 256;
+        poolInfo.totalBalanceYLong = 256;
+        poolInfo.totalBalanceXShort = 256;
+        poolInfo.totalBalanceYShort = 256;
+        poolInfo.totalBinShareX = _tokenShare;
+        poolInfo.totalBinShareY = _tokenShare;
+        poolInfo.activeBinShareX = _binShare;
+        poolInfo.activeBinShareY = _binShare;
+        poolInfo.activeId = _activeId;
+        poolInfo.lowestId = _lowestId;
+        poolInfo.highestId = _highestId;
+        poolInfo.tickX = _tickX;
+        poolInfo.tickY = _tickY;
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
     }
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
     /// The prevention is implemented in the swap function, disallowing complete depletion of liquidity
-    function mint(LiquidityOption calldata option)
+    function mint(
+        LiquidityOption calldata option
+    )
         external
         override
         ensure(option.deadline)
@@ -202,14 +195,9 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
     /// The prevention is implemented in the swap function, disallowing complete depletion of liquidity
-    function burn(LiquidityOption calldata option)
-        external
-        override
-        ensure(option.deadline)
-        nonReentrant
-        noDelegateCall
-        returns (uint256 amountX, uint256 amountY)
-    {
+    function burn(
+        LiquidityOption calldata option
+    ) external override ensure(option.deadline) nonReentrant noDelegateCall returns (uint256 amountX, uint256 amountY) {
         address sender = msg.sender;
         int24 binId = poolInfo.activeId;
 
@@ -277,11 +265,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
     /// The prevention is implemented in the swap and burn function, disallowing complete depletion of liquidity
-    function flash(address recipient, address callback, uint256 amountX, uint256 amountY)
-        external
-        nonReentrant
-        noDelegateCall
-    {
+    function flash(
+        address recipient,
+        address callback,
+        uint256 amountX,
+        uint256 amountY
+    ) external nonReentrant noDelegateCall {
         address tokenX = poolInfo.tokenX;
         address tokenY = poolInfo.tokenY;
 
@@ -325,15 +314,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
     }
 
-    function getTwabId() public view returns (int24 binId) {}
-
-    function swap(address recipient, bool xInYOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
-        external
-        ensure(deadline)
-        nonReentrant
-        noDelegateCall
-        returns (uint256 amountOut)
-    {
+    function swap(
+        address recipient,
+        bool xInYOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        uint256 deadline
+    ) external ensure(deadline) nonReentrant noDelegateCall returns (uint256 amountOut) {
         require(amountIn != 0 && minAmountOut != 0, INVALID_AMOUNT());
         int24 binId = poolInfo.activeId;
         int24 newHighestId = poolInfo.highestId;
@@ -354,8 +341,8 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             } else if (poolInfo.targetTimestamp <= _blockTimeStamp) {
                 // update the 7 days twab
                 int24 last7daysTwab = int24(
-                    (poolInfo.twabCumulative - poolInfo.last7daysCumulative)
-                        / int32(_blockTimeStamp - poolInfo.last7daysTimestamp)
+                    (poolInfo.twabCumulative - poolInfo.last7daysCumulative) /
+                        int32(_blockTimeStamp - poolInfo.last7daysTimestamp)
                 ); // overflow is unrealistic
                 poolInfo.last7daysCumulative = poolInfo.twabCumulative;
                 poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
@@ -375,10 +362,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
                     if (newRange > oldRange) {
                         uint256 oldTotalBinShareX = poolInfo.totalBinShareX;
-                        uint256 newTotalBinShareX =
-                            PriceMath.fullMulDivUnchecked(oldTotalBinShareX, uint24(newRange), uint24(oldRange)); // overflow is unrealistic
-                        uint256 addBinShareXPerBin =
-                            (newTotalBinShareX - oldTotalBinShareX) / uint24(newRange - oldRange);
+                        uint256 newTotalBinShareX = PriceMath.fullMulDivUnchecked(
+                            oldTotalBinShareX,
+                            uint24(newRange),
+                            uint24(oldRange)
+                        ); // overflow is unrealistic
+                        uint256 addBinShareXPerBin = (newTotalBinShareX - oldTotalBinShareX) /
+                            uint24(newRange - oldRange);
                         while (oldLowestId > newLowestId) {
                             oldLowestId--;
                             bins[oldLowestId] = addBinShareXPerBin;
@@ -398,10 +388,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
                     if (newRange > oldRange) {
                         uint256 oldTotalBinShareY = poolInfo.totalBinShareY;
-                        uint256 newTotalBinShareY =
-                            PriceMath.fullMulDivUnchecked(oldTotalBinShareY, uint24(newRange), uint24(oldRange)); // overflow is unrealistic
-                        uint256 addBinShareYPerBin =
-                            (newTotalBinShareY - oldTotalBinShareY) / uint24(newRange - oldRange);
+                        uint256 newTotalBinShareY = PriceMath.fullMulDivUnchecked(
+                            oldTotalBinShareY,
+                            uint24(newRange),
+                            uint24(oldRange)
+                        ); // overflow is unrealistic
+                        uint256 addBinShareYPerBin = (newTotalBinShareY - oldTotalBinShareY) /
+                            uint24(newRange - oldRange);
                         while (oldHighestId < newHighestId) {
                             oldHighestId++;
                             bins[oldHighestId] = addBinShareYPerBin;
@@ -534,19 +527,24 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     newHighestId++;
                     bins[newHighestId] = adjustedBinShareOut;
                     totalBinShareOut += adjustedBinShareOut;
+                    if (usedBinShareOut != 0) {
+                        // in case of perfect drain, we don't contract the bin on the other side
+                        uint256 adjustedBinShareInEquivalent = PriceMath.fullMulDivUnchecked(
+                            adjustedBinShareOut,
+                            binShareInGain,
+                            usedBinShareOut
+                        ); // overflow is unrealistic
+                        uint256 lowestIdBinShare = bins[newLowestId];
 
-                    uint256 adjustedBinShareInEquivalent =
-                        PriceMath.fullMulDiv(adjustedBinShareOut, binShareInGain, usedBinShareOut);
-                    uint256 newLowestIdBinShare = bins[newLowestId];
-
-                    if (binId - newLowestId > newHighestId - binId) {
-                        if (adjustedBinShareInEquivalent >= newLowestIdBinShare) {
-                            adjustedBinShareInEquivalent = newLowestIdBinShare;
-                            newLowestId++;
-                        } else {
-                            bins[newLowestId] = newLowestIdBinShare - adjustedBinShareInEquivalent;
+                        if (binId - newLowestId > newHighestId - binId) {
+                            if (adjustedBinShareInEquivalent >= lowestIdBinShare) {
+                                adjustedBinShareInEquivalent = lowestIdBinShare;
+                                newLowestId++;
+                            } else {
+                                bins[newLowestId] = lowestIdBinShare - adjustedBinShareInEquivalent;
+                            }
+                            totalBinShareIn -= adjustedBinShareInEquivalent;
                         }
-                        totalBinShareIn -= adjustedBinShareInEquivalent;
                     }
                 }
             } else {
@@ -556,19 +554,24 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                     newLowestId--;
                     bins[newLowestId] = adjustedBinShareOut;
                     totalBinShareOut += adjustedBinShareOut;
+                    if (usedBinShareOut != 0) {
+                        // in case of perfect drain, we don't contract the bin on the other side
+                        uint256 adjustedBinShareInEquivalent = PriceMath.fullMulDivUnchecked(
+                            adjustedBinShareOut,
+                            binShareInGain,
+                            usedBinShareOut
+                        ); // overflow is unrealistic
+                        uint256 highestIdBinShare = bins[newHighestId];
 
-                    uint256 adjustedBinShareInEquivalent =
-                        PriceMath.fullMulDiv(adjustedBinShareOut, binShareInGain, usedBinShareOut);
-                    uint256 newHighestIdBinShare = bins[newHighestId];
-
-                    if (newHighestId - binId > binId - newLowestId) {
-                        if (adjustedBinShareInEquivalent >= newHighestIdBinShare) {
-                            adjustedBinShareInEquivalent = newHighestIdBinShare;
-                            newHighestId--;
-                        } else {
-                            bins[newHighestId] = newHighestIdBinShare - adjustedBinShareInEquivalent;
+                        if (newHighestId - binId > binId - newLowestId) {
+                            if (adjustedBinShareInEquivalent >= highestIdBinShare) {
+                                adjustedBinShareInEquivalent = highestIdBinShare;
+                                newHighestId--;
+                            } else {
+                                bins[newHighestId] = highestIdBinShare - adjustedBinShareInEquivalent;
+                            }
+                            totalBinShareIn -= adjustedBinShareInEquivalent;
                         }
-                        totalBinShareIn -= adjustedBinShareInEquivalent;
                     }
                 }
             }

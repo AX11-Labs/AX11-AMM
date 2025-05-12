@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.8.28;
 
-import {IFactory} from "./interfaces/IFactory.sol";
-import {Pool} from "./Pool.sol";
-import {IERC20Metadata} from "./interfaces/IERC20Metadata.sol";
-import {NoDelegateCall} from "./abstracts/NoDelegateCall.sol";
+import {IFactory} from './interfaces/IFactory.sol';
+import {Pool} from './Pool.sol';
+import {IERC20Metadata} from './interfaces/IERC20Metadata.sol';
+import {NoDelegateCall} from './abstracts/NoDelegateCall.sol';
 
 contract Factory is IFactory, NoDelegateCall {
     mapping(address tokenX => mapping(address tokenY => address pool)) public override getPool;
@@ -20,22 +20,36 @@ contract Factory is IFactory, NoDelegateCall {
         feeTo = msg.sender;
     }
 
-    function createPool(address tokenX, address tokenY, int24 activeId)
-        external
-        override
-        noDelegateCall
-        returns (address pool)
-    {
+    function createPool(
+        address tokenX,
+        address tokenY,
+        int24 activeId
+    ) external override noDelegateCall returns (address pool) {
         require(tokenX < tokenY, INVALID_ADDRESS()); // required pre-sorting of tokens
         require(getPool[tokenX][tokenY] == address(0), CREATED());
 
-        string memory _name =
-            string.concat("Ax11 Pool [", IERC20Metadata(tokenX).name(), "/", IERC20Metadata(tokenY).name(), "]");
-        string memory _symbol =
-            string.concat("Ax11-LP [", IERC20Metadata(tokenX).symbol(), "/", IERC20Metadata(tokenY).symbol(), "]");
+        string memory _name = string.concat(
+            'Ax11 Pool [',
+            IERC20Metadata(tokenX).name(),
+            '/',
+            IERC20Metadata(tokenY).name(),
+            ']'
+        );
+        string memory _symbol = string.concat(
+            'Ax11-LP [',
+            IERC20Metadata(tokenX).symbol(),
+            '/',
+            IERC20Metadata(tokenY).symbol(),
+            ']'
+        );
         pool = address(
             new Pool{salt: keccak256(abi.encodePacked(tokenX, tokenY))}(
-                tokenX, tokenY, activeId, msg.sender, _name, _symbol
+                tokenX,
+                tokenY,
+                activeId,
+                msg.sender,
+                _name,
+                _symbol
             )
         );
 
