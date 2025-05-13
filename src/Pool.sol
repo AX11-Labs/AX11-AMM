@@ -33,7 +33,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         address _initiator,
         string memory name,
         string memory symbol
-    ) Ax11Lp(name, symbol) {
+    ) {
         factory = msg.sender;
         initialize(_tokenX, _tokenY, _activeId, _initiator);
     }
@@ -53,12 +53,13 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 binId,
         uint256 balance
     ) private pure returns (uint256 maxAmountIn, uint256 price) {
-        /// @dev equivalent to (1002<<128)/1000, which is 1.002 in 128.128 fixed point
+        /// @dev 340962931654780340390301356646631747878 is equal to (1002<<128)/1000,
+        /// which is 1.002 in 128.128 fixed point
         price = PriceMath.pow(340962931654780340390301356646631747878, binId);
         maxAmountIn = xInYOut
             ? PriceMath.fullMulDivUp(balance, 340282366920938463463374607431768211456, price)
             : PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
-        //340282366920938463463374607431768211456 is 1<<128
+        /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
     }
 
     /// @notice This function is used to calculate the amountIn for the next bin
@@ -75,7 +76,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         } else {
             price = ((previousPrice * 1000) / 1002);
             maxAmountIn = PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
-            //340282366920938463463374607431768211456 is 1<<128
+            /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
         }
     }
 
@@ -95,17 +96,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         checkBinIdLimit(_highestId);
 
         uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
-        int24 iteration = _activeId;
-
-        while (iteration < _highestId) {
-            iteration++;
-            bins[iteration] = _binShare;
-        }
-        iteration = _activeId;
-        while (iteration > _lowestId) {
-            iteration--;
-            bins[iteration] = _binShare;
-        }
 
         uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
         uint256 _lpShare = _tokenShare >> 1; // half of the token share
@@ -128,6 +118,12 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         poolInfo.highestId = _highestId;
         poolInfo.tickX = _tickX;
         poolInfo.tickY = _tickY;
+        poolInfo.groupBinXFrom = _activeId + 1;
+        poolInfo.groupBinXTo = _highestId;
+        poolInfo.groupBinYFrom = _activeId - 1;
+        poolInfo.groupBinYTo = _lowestId;
+        poolInfo.groupBinXSharePerBin = _binShare;
+        poolInfo.groupBinYSharePerBin = _binShare;
 
         _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
     }
@@ -329,20 +325,21 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             int64 newTwab = binId * int32(timeElapsed); // overflow is unrealistic,
             poolInfo.twabCumulative += newTwab; // overflow is unrealistic
             poolInfo.lastBlockTimestamp = _blockTimeStamp;
+            uint256 _targetTimestamp = poolInfo.targetTimestamp;
 
-            if (poolInfo.targetTimestamp == 0) {
-                poolInfo.last7daysCumulative = newTwab; // initialize
-                poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
-                poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
-            } else if (poolInfo.targetTimestamp <= _blockTimeStamp) {
+            if (_targetTimestamp == 0) {
+                poolInfo.last7daysCumulative = newTwab;
+                poolInfo.last7daysTimestamp = _blockTimeStamp;
+                poolInfo.targetTimestamp = _blockTimeStamp + 7 days;
+            } else if (_targetTimestamp <= _blockTimeStamp) {
                 // update the 7 days twab
                 int24 last7daysTwab = int24(
                     (poolInfo.twabCumulative - poolInfo.last7daysCumulative) /
                         int32(_blockTimeStamp - poolInfo.last7daysTimestamp)
-                ); // overflow is unrealistic
+                ); // int32 is sufficient
                 poolInfo.last7daysCumulative = poolInfo.twabCumulative;
-                poolInfo.last7daysTimestamp = _blockTimeStamp; // initialize
-                poolInfo.targetTimestamp = _blockTimeStamp + 7 days; // initialize
+                poolInfo.last7daysTimestamp = _blockTimeStamp;
+                poolInfo.targetTimestamp = _blockTimeStamp + 7 days;
 
                 // range expansion and contraction
                 int24 oldRange = newHighestId - newLowestId;
@@ -511,7 +508,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             totalBinShareOut -= usedBinShareOut; // update total bin share
 
             if (amountIn == 0) break; // delete bins[binId] is not necessary
-            // because if we pass the bin, it will set the new value in the next line
+            // because if we cross the bin, it will set the new value in the next line
             // and if it stays, we can just leave it, because we'll only use the activeBinShareX/Y in poolInfo
 
             bins[binId] = binShareIn; // add to new bin
