@@ -18,14 +18,4 @@ library SafeCast {
         y = uint128(x);
         require(y == x, SAFECAST_OVERFLOW());
     }
-
-    /**
-     * @dev Returns the downcasted int24 from int256, reverting on overflow
-     * @param x The value as an int256
-     * @return y The value as an int24
-     */
-    function safeInt24(int256 x) internal pure returns (int24 y) {
-        y = int24(x);
-        require(y == x, SAFECAST_OVERFLOW());
-    }
 }
