@@ -46,9 +46,9 @@ interface IPool {
         int24 groupBinYTo;
         int24 expandFrom;
         int24 expandTo;
-        uint256 groupBinXShare;
-        uint256 groupBinYShare;
-        uint256 expandShare;
+        uint256 groupBinXSharePerBin;
+        uint256 groupBinYSharePerBin;
+        uint256 expandSharePerBin;
     }
 
     // ---------- Function input struct ----------
