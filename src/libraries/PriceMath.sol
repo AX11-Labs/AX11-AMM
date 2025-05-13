@@ -218,4 +218,38 @@ library PriceMath {
 
         return invert ? type(uint256).max / result : result;
     }
+
+    /// @notice EXCLUDING FEE
+    /// @notice This is only for calculating the amountIn within a single bin.
+    function _getAmountInFromBin(
+        bool xInYOut,
+        int24 binId,
+        uint256 balance
+    ) internal pure returns (uint256 maxAmountIn, uint256 price) {
+        /// @dev 340962931654780340390301356646631747878 is equal to (1002<<128)/1000,
+        /// which is 1.002 in 128.128 fixed point
+        price = PriceMath.pow(340962931654780340390301356646631747878, binId);
+        maxAmountIn = xInYOut
+            ? PriceMath.fullMulDivUp(balance, 340282366920938463463374607431768211456, price)
+            : PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
+        /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
+    }
+
+    /// @notice This function is used to calculate the amountIn for the next bin
+    /// the previous price should be dervied from `_getAmountInFromBin`
+    /// this will save gas by not calculating the price with pow() again
+    function _getAmountInFromNextBin(
+        bool xInYOut,
+        uint256 previousPrice,
+        uint256 balance
+    ) internal pure returns (uint256 maxAmountIn, uint256 price) {
+        if (xInYOut) {
+            price = ((previousPrice * 1002) / 1000);
+            maxAmountIn = PriceMath.fullMulDivUp(balance, 340282366920938463463374607431768211456, price);
+        } else {
+            price = ((previousPrice * 1000) / 1002);
+            maxAmountIn = PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
+            /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
+        }
+    }
 }
