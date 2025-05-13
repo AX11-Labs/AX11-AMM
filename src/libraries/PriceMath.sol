@@ -2,6 +2,9 @@
 pragma solidity 0.8.28;
 
 library PriceMath {
+    error FullMulDivFailed();
+    error DivFailed();
+    error powFailed();
     /// @dev Calculates `floor(x * y / d)` with full precision.
     /// Throws if result overflows a uint256 or when `d` is zero.
     /// Credit to Remco Bloemen under MIT license: https://2π.com/21/muldiv
@@ -16,7 +19,11 @@ library PriceMath {
 
             // Temporarily use `z` as `p0` to save gas.
             z := mul(x, y) // Lower 256 bits of `x * y`.
-            for {} 1 {} {
+            for {
+
+            } 1 {
+
+            } {
                 // If overflows.
                 if iszero(mul(or(iszero(x), eq(div(z, x), y)), d)) {
                     let mm := mulmod(x, y, not(0))
@@ -48,42 +55,18 @@ library PriceMath {
                     inv := mul(inv, sub(2, mul(d, inv))) // inverse mod 2**32
                     inv := mul(inv, sub(2, mul(d, inv))) // inverse mod 2**64
                     inv := mul(inv, sub(2, mul(d, inv))) // inverse mod 2**128
-                    z :=
-                        mul(
-                            // Divide [p1 p0] by the factors of two.
-                            // Shift in bits from `p1` into `p0`. For this we need
-                            // to flip `t` such that it is `2**256 / t`.
-                            or(mul(sub(p1, gt(r, z)), add(div(sub(0, t), t), 1)), div(sub(z, r), t)),
-                            mul(sub(2, mul(d, inv)), inv) // inverse mod 2**256
-                        )
+                    z := mul(
+                        // Divide [p1 p0] by the factors of two.
+                        // Shift in bits from `p1` into `p0`. For this we need
+                        // to flip `t` such that it is `2**256 / t`.
+                        or(mul(sub(p1, gt(r, z)), add(div(sub(0, t), t), 1)), div(sub(z, r), t)),
+                        mul(sub(2, mul(d, inv)), inv) // inverse mod 2**256
+                    )
                     break
                 }
                 z := div(z, d)
                 break
             }
-        }
-    }
-
-    /// @dev Calculates `floor(x * y / d)` with full precision.
-    /// Behavior is undefined if `d` is zero or the final result cannot fit in 256 bits.
-    /// Performs the full 512 bit calculation regardless.
-    function fullMulDivUnchecked(uint256 x, uint256 y, uint256 d) internal pure returns (uint256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := mul(x, y)
-            let mm := mulmod(x, y, not(0))
-            let p1 := sub(mm, add(z, lt(mm, z)))
-            let t := and(d, sub(0, d))
-            let r := mulmod(x, y, d)
-            d := div(d, t)
-            let inv := xor(2, mul(3, d))
-            inv := mul(inv, sub(2, mul(d, inv)))
-            inv := mul(inv, sub(2, mul(d, inv)))
-            inv := mul(inv, sub(2, mul(d, inv)))
-            inv := mul(inv, sub(2, mul(d, inv)))
-            inv := mul(inv, sub(2, mul(d, inv)))
-            z :=
-                mul(or(mul(sub(p1, gt(r, z)), add(div(sub(0, t), t), 1)), div(sub(z, r), t)), mul(sub(2, mul(d, inv)), inv))
         }
     }
 
@@ -116,5 +99,123 @@ library PriceMath {
             }
             z := add(iszero(iszero(mod(x, d))), div(x, d))
         }
+    }
+
+    /**
+     * @notice Returns the value of x^y. It calculates `1 / x^abs(y)` if x is bigger than 2^128.
+     * At the end of the operations, we invert the result if needed.
+     * @param x The unsigned 128.128-binary fixed-point number for which to calculate the power
+     * @param y A relative number without any decimals, needs to be between ]2^21; 2^21[
+     */
+    function pow(uint256 x, int256 y) internal pure returns (uint256 result) {
+        uint256 scale = 340622649287859401926837982039199979667;
+        bool invert;
+        uint256 absY;
+
+        if (y == 0) return scale;
+
+        assembly {
+            absY := y
+            if slt(absY, 0) {
+                absY := sub(0, absY)
+                invert := iszero(invert)
+            }
+        }
+
+        if (absY < 0x100000) {
+            result = scale;
+            assembly {
+                let squared := x
+                if gt(x, 0xffffffffffffffffffffffffffffffff) {
+                    squared := div(not(0), squared)
+                    invert := iszero(invert)
+                }
+
+                if and(absY, 0x1) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x2) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x4) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x8) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x10) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x20) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x40) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x80) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x100) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x200) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x400) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x800) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x1000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x2000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x4000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x8000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x10000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x20000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x40000) {
+                    result := shr(128, mul(result, squared))
+                }
+                squared := shr(128, mul(squared, squared))
+                if and(absY, 0x80000) {
+                    result := shr(128, mul(result, squared))
+                }
+            }
+        }
+
+        // revert if y is too big or if x^y underflowed
+        if (result == 0) revert powFailed();
+
+        return invert ? type(uint256).max / result : result;
     }
 }
