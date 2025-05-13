@@ -17,67 +17,24 @@ import {IAx11FlashCallback} from './interfaces/IAx11FlashCallback.sol';
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
-    mapping(int24 binId => uint256 binshare) private bins; // share is stored as 128.128 fixed point
+    mapping(uint256 poolId => PoolInfo) private pools;
+    mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private bins; // share is stored as 128.128 fixed point
 
-    address public immutable override factory;
+    // address public immutable override factory;
 
-    PoolInfo private poolInfo;
+    // PoolInfo private poolInfo;
 
-    // forgefmt: disable-next-line
-    //uint256 transient tempValue;
-
-    constructor(
-        address _tokenX,
-        address _tokenY,
-        int24 _activeId,
-        address _initiator,
-        string memory name,
-        string memory symbol
-    ) {
-        factory = msg.sender;
+    constructor(address _tokenX, address _tokenY, int24 _activeId, address _initiator) {
+        // factory = msg.sender;
         initialize(_tokenX, _tokenY, _activeId, _initiator);
     }
 
-    function getPoolInfo() public view override returns (PoolInfo memory) {
-        return poolInfo;
+    function getPoolInfo(uint256 poolId) public view override returns (PoolInfo memory) {
+        return pools[poolId];
     }
 
     function checkBinIdLimit(int24 value) private pure {
         require(value >= -44405 && value <= 44405, INVALID_BIN_ID());
-    }
-
-    /// @notice EXCLUDING FEE
-    /// @notice This is only for calculating the amountIn within a single bin.
-    function _getAmountInFromBin(
-        bool xInYOut,
-        int24 binId,
-        uint256 balance
-    ) private pure returns (uint256 maxAmountIn, uint256 price) {
-        /// @dev 340962931654780340390301356646631747878 is equal to (1002<<128)/1000,
-        /// which is 1.002 in 128.128 fixed point
-        price = PriceMath.pow(340962931654780340390301356646631747878, binId);
-        maxAmountIn = xInYOut
-            ? PriceMath.fullMulDivUp(balance, 340282366920938463463374607431768211456, price)
-            : PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
-        /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
-    }
-
-    /// @notice This function is used to calculate the amountIn for the next bin
-    /// the previous price should be dervied from `_getAmountInFromBin`
-    /// this will save gas by not calculating the price with pow() again
-    function _getAmountInFromNextBin(
-        bool xInYOut,
-        uint256 previousPrice,
-        uint256 balance
-    ) private pure returns (uint256 maxAmountIn, uint256 price) {
-        if (xInYOut) {
-            price = ((previousPrice * 1002) / 1000);
-            maxAmountIn = PriceMath.fullMulDivUp(balance, 340282366920938463463374607431768211456, price);
-        } else {
-            price = ((previousPrice * 1000) / 1002);
-            maxAmountIn = PriceMath.fullMulDivUp(balance, price, 340282366920938463463374607431768211456);
-            /// @dev 340282366920938463463374607431768211456 is equal to 1<<128
-        }
     }
 
     /// @notice Initialize the pool
@@ -481,7 +438,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
         uint256 originalAmountIn = amountIn;
         uint256 binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
-        (uint256 maxAmountIn, uint256 price) = _getAmountInFromBin(xInYOut, binId, binAmountOut);
+        (uint256 maxAmountIn, uint256 price) = PriceMath._getAmountInFromBin(xInYOut, binId, binAmountOut);
         uint256 usedBinShareOut;
 
         while (binId >= newLowestId && binId <= newHighestId) {
@@ -573,7 +530,7 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             binShareOut = bins[binId];
 
             binAmountOut = PriceMath.fullMulDiv(totalBalOut, binShareOut, totalBinShareOut);
-            (maxAmountIn, price) = _getAmountInFromNextBin(xInYOut, price, binAmountOut);
+            (maxAmountIn, price) = PriceMath._getAmountInFromNextBin(xInYOut, price, binAmountOut);
         }
 
         // calculate fee
