@@ -2,9 +2,9 @@
 
 pragma solidity 0.8.28;
 
-import {IERC20Metadata} from "./IERC20Metadata.sol";
+import {IERC20Metadata} from './IERC20Metadata.sol';
 
-/// @title Interface for Ax11 LP Token
+/// @title Interface for AX11 liquidity token
 /// @notice This interface defines the core functionality for the Ax11 LP token, including ERC20-like operations
 /// with support for long and short positions
 interface IAx11Lp is IERC20Metadata {
@@ -31,19 +31,27 @@ interface IAx11Lp is IERC20Metadata {
     /// @notice Event emitted when the approval amount for the spender of a given owner's tokens changes.
     /// @param owner The account that approved spending of its tokens
     /// @param spender The account for which the spending allowance was modified
+    /// @param poolId The poolId of the token
     /// @param value block timestamp limit
 
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 indexed poolId, uint256 value);
 
     /// @notice Event emitted when LP tokens are transferred between accounts
     /// @param from The account from which the LP tokens were sent
     /// @param to The account to which the LP tokens were sent
+    /// @param poolId The poolId of the token
     /// @param longX The amount of long position X tokens transferred
     /// @param longY The amount of long position Y tokens transferred
     /// @param shortX The amount of short position X tokens transferred
     /// @param shortY The amount of short position Y tokens transferred
     event Transfer(
-        address indexed from, address indexed to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY
+        address indexed from,
+        address indexed to,
+        uint256 indexed poolId,
+        uint256 longX,
+        uint256 longY,
+        uint256 shortX,
+        uint256 shortY
     );
 
     /// @notice Returns the name of the token
@@ -59,72 +67,98 @@ interface IAx11Lp is IERC20Metadata {
     function decimals() external view returns (uint8);
 
     /// @notice Returns the total supply of LP tokens
+    /// @param poolId The poolId of the token
     /// @return The total supply information containing long and short positions
-    function totalSupply() external view returns (LpInfo memory);
+    function totalSupply(uint256 poolId) external view returns (LpInfo memory);
 
     /// @notice Returns the LP token balance of an account
     /// @param account The address to query the balance of
+    /// @param poolId The poolId of the token
     /// @return longX The amount of long position X tokens held by the account
     /// @return longY The amount of long position Y tokens held by the account
     /// @return shortX The amount of short position X tokens held by the account
     /// @return shortY The amount of short position Y tokens held by the account
-    function balanceOf(address account)
-        external
-        view
-        returns (uint256 longX, uint256 longY, uint256 shortX, uint256 shortY);
+    function balanceOf(
+        address account,
+        uint256 poolId
+    ) external view returns (uint256 longX, uint256 longY, uint256 shortX, uint256 shortY);
 
     /// @notice Returns the current allowance status between owner and spender
     /// @param owner The address of the token owner
     /// @param spender The address of the token spender
+    /// @param poolId The poolId of the token
     /// @return the block timestamp limit
-    function allowance(address owner, address spender) external view returns (uint256);
+    function allowance(address owner, address spender, uint256 poolId) external view returns (uint256);
 
     /// @notice Approves or revokes permission for a spender to transfer tokens
     /// @param spender The address to approve or revoke permission for
+    /// @param poolId The poolId of the token
     /// @param value the block timestamp limit
     /// @return A boolean indicating whether the operation succeeded
-    function approve(address spender, uint256 value) external returns (bool);
+    function approve(address spender, uint256 poolId, uint256 value) external returns (bool);
 
     /// @notice Transfers LP tokens to another address
     /// @param to The address to transfer tokens to
+    /// @param poolId The poolId of the token
     /// @param longX The amount of long position X tokens to transfer
     /// @param longY The amount of long position Y tokens to transfer
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transfer(address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
-        external
-        returns (bool);
+    function transfer(
+        address to,
+        uint256 poolId,
+        uint256 longX,
+        uint256 longY,
+        uint256 shortX,
+        uint256 shortY
+    ) external returns (bool);
 
     /// @notice Transfers LP tokens from one address to another
     /// @param from The address to transfer tokens from
     /// @param to The address to transfer tokens to
+    /// @param poolId The poolId of the token
     /// @param longX The amount of long position X tokens to transfer
     /// @param longY The amount of long position Y tokens to transfer
     /// @param shortX The amount of short position X tokens to transfer
     /// @param shortY The amount of short position Y tokens to transfer
     /// @return A boolean indicating whether the transfer succeeded
-    function transferFrom(address from, address to, uint256 longX, uint256 longY, uint256 shortX, uint256 shortY)
-        external
-        returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint256 poolId,
+        uint256 longX,
+        uint256 longY,
+        uint256 shortX,
+        uint256 shortY
+    ) external returns (bool);
 
     /// @notice Approves a spender to transfer tokens using a signature
     /// @param owner The address of the token owner
     /// @param spender The address to approve or revoke permission for
+    /// @param poolId The poolId of the token
     /// @param value the block timestamp limit
     /// @param deadline The time at which the signature expires
     /// @param v The recovery byte of the signature
     /// @param r Half of the ECDSA signature pair
     /// @param s Half of the ECDSA signature pair
     /// @return A boolean indicating whether the operation succeeded
-    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
-        external
-        returns (bool);
+    function permit(
+        address owner,
+        address spender,
+        uint256 poolId,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (bool);
 
     /// @notice Returns the current nonce for an owner
     /// @param owner The address to query the nonce of
+    /// @param poolId The poolId of the token
     /// @return The current nonce of the owner
-    function nonces(address owner) external view returns (uint256);
+    function nonces(address owner, uint256 poolId) external view returns (uint256);
 
     /// @notice Returns the domain separator used in the permit signature
     /// @return The domain separator
