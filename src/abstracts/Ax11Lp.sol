@@ -2,17 +2,17 @@
 
 pragma solidity 0.8.28;
 
-import {IAx11Lp} from '../interfaces/IAx11Lp.sol';
+import {IAX11Lp} from '../interfaces/IAX11Lp.sol';
 
 /**
- * @title Ax11Lp
+ * @title AX11 liquidity token
  * @notice Implementation of the AX11 liqudiity token, using minimal multi-token standard.
  * @dev This contract implements a TTL (Time-To-Live) based token approval system instead of the standard ERC20 amount-based allowance.
  *      The allowance mapping stores block timestamps as values, where a timestamp greater than the current block.timestamp
  *      indicates an active approval. This provides a time-limited approval mechanism where approvals automatically expire.
  *      This differs from standard ERC20 where allowances are amount-based and must be explicitly revoked.
  */
-abstract contract Ax11Lp is IAx11Lp {
+abstract contract AX11Lp is IAX11Lp {
     /*//////////////////////////////////////////////////////////////
                               ERC20 STORAGE
     //////////////////////////////////////////////////////////////*/

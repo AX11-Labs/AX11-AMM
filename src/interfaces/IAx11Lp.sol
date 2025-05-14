@@ -2,12 +2,10 @@
 
 pragma solidity 0.8.28;
 
-import {IERC20Metadata} from './IERC20Metadata.sol';
-
 /// @title Interface for AX11 liquidity token
 /// @notice This interface defines the core functionality for the Ax11 LP token, including ERC20-like operations
 /// with support for long and short positions
-interface IAx11Lp is IERC20Metadata {
+interface IAX11Lp {
     /// @notice Error thrown when attempting to transfer tokens without sufficient allowance
     error INSUFFICIENT_ALLOWANCE();
 
