@@ -27,6 +27,7 @@ library TransferHelper {
             }
         }
     }
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                      ERC20 OPERATIONS                      */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -55,9 +56,9 @@ library TransferHelper {
             mstore(0x40, m) // Restore the free memory pointer.
         }
     }
+
     /// @dev Sends `amount` of ERC20 `token` from the current contract to `to`.
     /// Reverts upon failure.
-
     function safeTransfer(address token, address to, uint256 amount) internal {
         /// @solidity memory-safe-assembly
         assembly {
