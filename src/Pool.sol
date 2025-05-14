@@ -13,76 +13,94 @@ import {FeeTier} from './libraries/FeeTier.sol';
 import {SafeCast} from './libraries/SafeCast.sol';
 import {NoDelegateCall} from './abstracts/NoDelegateCall.sol';
 import {IAx11FlashCallback} from './interfaces/IAx11FlashCallback.sol';
+import {PoolHelper} from './libraries/PoolHelper.sol';
 
 contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
     mapping(uint256 poolId => PoolInfo) private pools;
+    mapping(address tokenX => mapping(address tokenY => uint256 poolId)) private poolIds;
     mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private bins; // share is stored as 128.128 fixed point
 
-    // address public immutable override factory;
+    uint256 public override totalPools;
+    address public override owner;
 
-    // PoolInfo private poolInfo;
+    constructor() {
+        owner = msg.sender;
+    }
 
-    constructor(address _tokenX, address _tokenY, int24 _activeId, address _initiator) {
-        // factory = msg.sender;
-        initialize(_tokenX, _tokenY, _activeId, _initiator);
+    function setOwner(address _owner) external override {
+        require(msg.sender == owner, NOT_OWNER());
+        owner = _owner;
+    }
+
+    function getPoolId(address tokenX, address tokenY) public view override returns (uint256) {
+        return poolIds[tokenX][tokenY];
     }
 
     function getPoolInfo(uint256 poolId) public view override returns (PoolInfo memory) {
         return pools[poolId];
     }
 
-    function checkBinIdLimit(int24 value) private pure {
-        require(value >= -44405 && value <= 44405, INVALID_BIN_ID());
-    }
-
-    /// @notice Initialize the pool
-    /// @param _activeId The active bin id
-    /// @param _initiator The initiator of the pool
+    /// @notice Create a liquidity pool
+    /// @param tokenX The address of the tokenX
+    /// @param tokenY The address of the tokenY
+    /// @param activeId The active bin id
     /// @dev we assume the amount received by the pool is ALWAYS equal to the transferFrom value of 512
     /// Note: meaning that we don't support fee-on-transfer tokens
-    function initialize(address _tokenX, address _tokenY, int24 _activeId, address _initiator) private {
-        TransferHelper.safeTransferFrom(_tokenX, _initiator, address(this), 512);
-        TransferHelper.safeTransferFrom(_tokenY, _initiator, address(this), 512);
+    function createPool(
+        address tokenX,
+        address tokenY,
+        int24 activeId
+    ) public override noDelegateCall returns (uint256 poolId) {
+        address initiator = msg.sender;
+        require(tokenX < tokenY, INVALID_ADDRESS()); // required pre-sorting of tokens
+        poolId = PoolHelper.computePoolId(tokenX, tokenY);
 
-        int24 _lowestId = _activeId - 255;
-        int24 _highestId = _activeId + 255;
+        int24 lowestId = activeId - 255;
+        int24 highestId = activeId + 255;
 
-        checkBinIdLimit(_lowestId);
-        checkBinIdLimit(_highestId);
+        PoolHelper.checkBinIdLimit(lowestId);
+        PoolHelper.checkBinIdLimit(highestId);
 
-        uint256 _binShare = 2 << 128; // 2 tokens/bin, scaling as 128.128 fixed point
+        uint256 binShare = 2 << 128; // 2 tokens/bin, 128.128 fixed point
+        uint256 tokenShare = 512 << 128; //  128.128 fixed point
+        uint256 lpShare = tokenShare >> 1; // half of the token share
 
-        uint256 _tokenShare = 512 << 128; // scaling as 128.128 fixed point
-        uint256 _lpShare = _tokenShare >> 1; // half of the token share
+        int24 tickX = (activeId + lowestId) >> 1; // midpoint,round down
+        int24 tickY = (activeId + highestId) >> 1; // midpoint,round down
 
-        int24 _tickX = (_activeId + _lowestId) >> 1; // midpoint,round down
-        int24 _tickY = (_activeId + _highestId) >> 1; // midpoint,round down
+        PoolInfo storage pool = pools[poolId];
+        require(pool.tokenY == address(0), INVALID_ADDRESS()); // check if pool already exists
 
-        poolInfo.tokenX = _tokenX;
-        poolInfo.tokenY = _tokenY;
-        poolInfo.totalBalanceXLong = 256;
-        poolInfo.totalBalanceYLong = 256;
-        poolInfo.totalBalanceXShort = 256;
-        poolInfo.totalBalanceYShort = 256;
-        poolInfo.totalBinShareX = _tokenShare;
-        poolInfo.totalBinShareY = _tokenShare;
-        poolInfo.activeBinShareX = _binShare;
-        poolInfo.activeBinShareY = _binShare;
-        poolInfo.activeId = _activeId;
-        poolInfo.lowestId = _lowestId;
-        poolInfo.highestId = _highestId;
-        poolInfo.tickX = _tickX;
-        poolInfo.tickY = _tickY;
-        poolInfo.groupBinXFrom = _activeId + 1;
-        poolInfo.groupBinXTo = _highestId;
-        poolInfo.groupBinYFrom = _activeId - 1;
-        poolInfo.groupBinYTo = _lowestId;
-        poolInfo.groupBinXSharePerBin = _binShare;
-        poolInfo.groupBinYSharePerBin = _binShare;
+        TransferHelper.safeTransferFrom(tokenX, initiator, address(this), 512);
+        TransferHelper.safeTransferFrom(tokenY, initiator, address(this), 512);
 
-        _mint(address(0), _lpShare, _lpShare, _lpShare, _lpShare);
+        pool.tokenX = tokenX;
+        pool.tokenY = tokenY;
+        pool.totalBalanceXLong = 256;
+        pool.totalBalanceYLong = 256;
+        pool.totalBalanceXShort = 256;
+        pool.totalBalanceYShort = 256;
+        pool.totalBinShareX = tokenShare;
+        pool.totalBinShareY = tokenShare;
+        pool.activeBinShareX = binShare;
+        pool.activeBinShareY = binShare;
+        pool.activeId = activeId;
+        pool.lowestId = lowestId;
+        pool.highestId = highestId;
+        pool.tickX = tickX;
+        pool.tickY = tickY;
+        pool.groupBinXFrom = activeId + 1;
+        pool.groupBinXTo = highestId;
+        pool.groupBinYFrom = activeId - 1;
+        pool.groupBinYTo = lowestId;
+        pool.groupBinXSharePerBin = binShare;
+        pool.groupBinYSharePerBin = binShare;
+
+        _mint(address(0), poolId, lpShare, lpShare, lpShare, lpShare);
+        totalPools++;
+        emit PoolCreated(tokenX, tokenY, poolId);
     }
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
