@@ -70,11 +70,13 @@ interface IPool {
         uint256 amountForShortY;
         uint256 deadline;
     }
-    function owner() external view returns (address);
+    function owner() external returns (address);
     function totalPools() external view returns (uint256);
-    function createPool(address tokenX, address tokenY, int24 activeId) external view returns (uint256 poolId);
+    function createPool(address tokenX, address tokenY, int24 activeId) external returns (uint256 poolId);
     function getPoolInfo(uint256 poolId) external view returns (PoolInfo memory);
     function getPoolId(address tokenX, address tokenY) external view returns (uint256);
+
+    function flash(address recipient, address callback, address token, uint256 amount, uint256 deadline) external;
 
     function mint(
         LiquidityOption calldata option

@@ -2,20 +2,22 @@
 
 pragma solidity 0.8.28;
 
-import {Ax11Lp} from './abstracts/Ax11Lp.sol';
-import {IPool} from './interfaces/IPool.sol';
-import {TransferHelper} from './libraries/TransferHelper.sol';
+import {AX11Lp} from './abstracts/AX11Lp.sol';
 import {ReentrancyGuard} from './abstracts/ReentrancyGuard.sol';
-import {IERC20} from './interfaces/IERC20.sol';
 import {Deadline} from './abstracts/Deadline.sol';
+import {NoDelegateCall} from './abstracts/NoDelegateCall.sol';
+
+import {IPool} from './interfaces/IPool.sol';
+import {IERC20} from './interfaces/IERC20.sol';
+import {IAX11FlashCallback} from './interfaces/IAX11FlashCallback.sol';
+
+import {TransferHelper} from './libraries/TransferHelper.sol';
 import {PriceMath} from './libraries/PriceMath.sol';
 import {FeeTier} from './libraries/FeeTier.sol';
 import {SafeCast} from './libraries/SafeCast.sol';
-import {NoDelegateCall} from './abstracts/NoDelegateCall.sol';
-import {IAx11FlashCallback} from './interfaces/IAx11FlashCallback.sol';
 import {PoolHelper} from './libraries/PoolHelper.sol';
 
-contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
+contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
     mapping(uint256 poolId => PoolInfo) private pools;
@@ -64,11 +66,11 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         PoolHelper.checkBinIdLimit(highestId);
 
         uint256 binShare = 2 << 128; // 2 tokens/bin, 128.128 fixed point
-        uint256 tokenShare = 512 << 128; //  128.128 fixed point
-        uint256 lpShare = tokenShare >> 1; // half of the token share
+        uint256 tokenShare = 512 << 128; // 128.128 fixed point
+        uint256 lpShare = tokenShare >> 1; // half of token share
 
-        int24 tickX = (activeId + lowestId) >> 1; // midpoint,round down
-        int24 tickY = (activeId + highestId) >> 1; // midpoint,round down
+        int24 tickX = (activeId + lowestId) >> 1; // midpoint, round down
+        int24 tickY = (activeId + highestId) >> 1; // midpoint, round down
 
         PoolInfo storage pool = pools[poolId];
         require(pool.tokenY == address(0), INVALID_ADDRESS()); // check if pool already exists
@@ -101,6 +103,23 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         _mint(address(0), poolId, lpShare, lpShare, lpShare, lpShare);
         totalPools++;
         emit PoolCreated(tokenX, tokenY, poolId);
+    }
+
+    /// @dev flash loan function, free of any fee
+    function flash(
+        address recipient,
+        address callback,
+        address token,
+        uint256 amount,
+        uint256 deadline
+    ) external override ensure(deadline) nonReentrant noDelegateCall {
+        if (amount != 0) {
+            uint256 available = IERC20(token).balanceOf(address(this));
+            require(available >= amount, INSUFFICIENT_LIQUIDITY());
+            TransferHelper.safeTransfer(token, recipient, amount);
+            IAX11FlashCallback(callback).flashCallback();
+            require(IERC20(token).balanceOf(address(this)) >= available, INSUFFICIENT_PAYBACK());
+        }
     }
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
@@ -227,58 +246,6 @@ contract Pool is Ax11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
         if (amountX != 0) TransferHelper.safeTransfer(poolInfo.tokenX, sender, amountX);
         if (amountY != 0) TransferHelper.safeTransfer(poolInfo.tokenY, sender, amountY);
-    }
-
-    /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
-    /// The prevention is implemented in the swap and burn function, disallowing complete depletion of liquidity
-    function flash(
-        address recipient,
-        address callback,
-        uint256 amountX,
-        uint256 amountY,
-        uint256 deadline
-    ) external ensure(deadline) nonReentrant noDelegateCall {
-        address tokenX = poolInfo.tokenX;
-        address tokenY = poolInfo.tokenY;
-
-        uint256 balanceXBefore;
-        uint256 balanceYBefore;
-        uint256 feeX;
-        uint256 feeY;
-
-        uint256 balanceAfter;
-        uint256 totalBalLong;
-        uint256 totalBalShort;
-
-        if (amountX != 0) {
-            balanceXBefore = IERC20(tokenX).balanceOf(address(this));
-            feeX = PriceMath.divUp(amountX, 10000); // 0.01% fee
-            TransferHelper.safeTransfer(tokenX, recipient, amountX);
-        }
-        if (amountY != 0) {
-            balanceYBefore = IERC20(tokenY).balanceOf(address(this));
-            feeY = PriceMath.divUp(amountY, 10000); // 0.01% fee
-            TransferHelper.safeTransfer(tokenY, recipient, amountY);
-        }
-
-        IAx11FlashCallback(callback).flashCallback(feeX, feeY);
-
-        if (amountX != 0) {
-            balanceAfter = IERC20(tokenX).balanceOf(address(this));
-            require(balanceAfter >= (balanceXBefore + feeX), INSUFFICIENT_PAYBACK());
-            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceXLong, balanceXBefore);
-            totalBalShort = balanceAfter - totalBalLong;
-            poolInfo.totalBalanceXLong = totalBalLong.safe128();
-            poolInfo.totalBalanceXShort = totalBalShort.safe128();
-        }
-        if (amountY != 0) {
-            balanceAfter = IERC20(tokenY).balanceOf(address(this));
-            require(balanceAfter >= (balanceYBefore + feeY), INSUFFICIENT_PAYBACK());
-            totalBalLong = PriceMath.fullMulDiv(balanceAfter, poolInfo.totalBalanceYLong, balanceYBefore);
-            totalBalShort = balanceAfter - totalBalLong;
-            poolInfo.totalBalanceYLong = totalBalLong.safe128();
-            poolInfo.totalBalanceYShort = totalBalShort.safe128();
-        }
     }
 
     function swap(
