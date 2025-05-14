@@ -3,11 +3,18 @@
 pragma solidity 0.8.28;
 
 interface IPool {
-    error INVALID_BIN_ID();
+    error NOT_OWNER();
+    error INVALID_ADDRESS();
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
     error INSUFFICIENT_PAYBACK();
     error INSUFFICIENT_LIQUIDITY();
+
+    /// @notice Emitted when a new pool is created
+    /// @param tokenX The first token of the pool (lower address)
+    /// @param tokenY The second token of the pool (higher address)
+    /// @param poolId The poolId of the newly created pool
+    event PoolCreated(address indexed tokenX, address indexed tokenY, uint256 poolId);
 
     // ---------- Storage struct ----------
 
@@ -63,9 +70,12 @@ interface IPool {
         uint256 amountForShortY;
         uint256 deadline;
     }
+    function owner() external view returns (address);
+    function totalPools() external view returns (uint256);
+    function createPool(address tokenX, address tokenY, int24 activeId) external view returns (uint256 poolId);
+    function getPoolInfo(uint256 poolId) external view returns (PoolInfo memory);
+    function getPoolId(address tokenX, address tokenY) external view returns (uint256);
 
-    function factory() external view returns (address);
-    function getPoolInfo() external view returns (PoolInfo memory);
     function mint(
         LiquidityOption calldata option
     ) external returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
