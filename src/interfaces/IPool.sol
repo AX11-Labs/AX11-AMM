@@ -62,12 +62,13 @@ interface IPool {
 
     struct LiquidityOption {
         address recipient;
-        int24 minActiveId;
-        int24 maxActiveId;
+        uint256 poolId;
         uint256 amountForLongX;
         uint256 amountForLongY;
         uint256 amountForShortX;
         uint256 amountForShortY;
+        int24 minActiveId; // slippage
+        int24 maxActiveId; // slippage
         uint256 deadline;
     }
     function owner() external returns (address);
