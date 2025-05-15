@@ -4,10 +4,11 @@ pragma solidity 0.8.28;
 
 interface IPool {
     error NOT_OWNER();
-    error INVALID_ADDRESS();
     error INVALID_AMOUNT();
     error SLIPPAGE_EXCEEDED();
-    error INSUFFICIENT_PAYBACK();
+    error FLASH_INSUFFICIENT_PAYBACK();
+    error MINT_INSUFFICIENT_PAYBACK();
+    error BURN_INSUFFICIENT_PAYBACK();
     error INSUFFICIENT_LIQUIDITY();
 
     /// @notice Emitted when a new pool is created
@@ -62,6 +63,7 @@ interface IPool {
 
     struct LiquidityOption {
         address recipient;
+        address callback;
         uint256 poolId;
         uint256 amountForLongX;
         uint256 amountForLongY;
@@ -72,6 +74,7 @@ interface IPool {
         uint256 deadline;
     }
     function owner() external returns (address);
+    function setOwner(address newOwner) external;
     function totalPools() external view returns (uint256);
     function createPool(address tokenX, address tokenY, int24 activeId) external returns (uint256 poolId);
     function getPoolInfo(uint256 poolId) external view returns (PoolInfo memory);
