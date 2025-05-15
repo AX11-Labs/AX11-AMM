@@ -105,24 +105,26 @@ abstract contract AX11Lp is IAX11Lp {
         uint256 shortY
     ) public returns (bool) {
         require(to != address(this), INVALID_ADDRESS());
+        if (to != address(0)) {
+            LpInfo storage lpInfo_from = balanceOf[msg.sender][poolId];
+            lpInfo_from.longX -= longX;
+            lpInfo_from.longY -= longY;
+            lpInfo_from.shortX -= shortX;
+            lpInfo_from.shortY -= shortY;
 
-        LpInfo storage lpInfo_from = balanceOf[msg.sender][poolId];
-        lpInfo_from.longX -= longX;
-        lpInfo_from.longY -= longY;
-        lpInfo_from.shortX -= shortX;
-        lpInfo_from.shortY -= shortY;
-
-        LpInfo storage lpInfo_to = balanceOf[to][poolId];
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
-        unchecked {
-            lpInfo_to.longX += longX;
-            lpInfo_to.longY += longY;
-            lpInfo_to.shortX += shortX;
-            lpInfo_to.shortY += shortY;
+            LpInfo storage lpInfo_to = balanceOf[to][poolId];
+            // Cannot overflow because the sum of all user
+            // balances can't exceed the max uint256 value.
+            unchecked {
+                lpInfo_to.longX += longX;
+                lpInfo_to.longY += longY;
+                lpInfo_to.shortX += shortX;
+                lpInfo_to.shortY += shortY;
+            }
+            emit Transfer(msg.sender, to, poolId, longX, longY, shortX, shortY);
+        } else {
+            _burn(msg.sender, poolId, longX, longY, shortX, shortY);
         }
-        emit Transfer(msg.sender, to, poolId, longX, longY, shortX, shortY);
-
         return true;
     }
 
@@ -146,23 +148,26 @@ abstract contract AX11Lp is IAX11Lp {
     ) public returns (bool) {
         require(to != address(this), INVALID_ADDRESS());
         require(allowance[from][msg.sender][poolId] >= block.timestamp, INSUFFICIENT_ALLOWANCE());
+        if (from != address(0)) {
+            LpInfo storage lpInfo_from = balanceOf[from][poolId];
+            lpInfo_from.longX -= longX;
+            lpInfo_from.longY -= longY;
+            lpInfo_from.shortX -= shortX;
+            lpInfo_from.shortY -= shortY;
 
-        LpInfo storage lpInfo_from = balanceOf[from][poolId];
-        lpInfo_from.longX -= longX;
-        lpInfo_from.longY -= longY;
-        lpInfo_from.shortX -= shortX;
-        lpInfo_from.shortY -= shortY;
-
-        LpInfo storage lpInfo_to = balanceOf[to][poolId];
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
-        unchecked {
-            lpInfo_to.longX += longX;
-            lpInfo_to.longY += longY;
-            lpInfo_to.shortX += shortX;
-            lpInfo_to.shortY += shortY;
+            LpInfo storage lpInfo_to = balanceOf[to][poolId];
+            // Cannot overflow because the sum of all user
+            // balances can't exceed the max uint256 value.
+            unchecked {
+                lpInfo_to.longX += longX;
+                lpInfo_to.longY += longY;
+                lpInfo_to.shortX += shortX;
+                lpInfo_to.shortY += shortY;
+            }
+            emit Transfer(from, to, poolId, longX, longY, shortX, shortY);
+        } else {
+            _burn(from, poolId, longX, longY, shortX, shortY);
         }
-        emit Transfer(from, to, poolId, longX, longY, shortX, shortY);
 
         return true;
     }
