@@ -6,5 +6,6 @@ pragma solidity 0.8.28;
 /// @notice Any contract that calls IPool.flash() must implement this interface
 interface IAX11FlashCallback {
     /// @notice Callback function interface for flashloan implementation
-    function AX11FlashCallback() external;
+    /// @param paybackAmount The amount of the token to be paid back, fee included.
+    function AX11FlashCallback(uint256 paybackAmount) external;
 }
