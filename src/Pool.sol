@@ -20,9 +20,9 @@ import {PoolHelper} from './libraries/PoolHelper.sol';
 contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
-    mapping(uint256 poolId => PoolInfo) private pools;
-    mapping(address tokenX => mapping(address tokenY => uint256 poolId)) private poolIds;
-    mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private bins; // share is stored as 128.128 fixed point
+    mapping(uint256 poolId => PoolInfo) private _pools;
+    mapping(address tokenX => mapping(address tokenY => uint256 poolId)) private _poolIds;
+    mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private _bins; // share is stored as 128.128 fixed point
 
     uint256 public override totalPools;
     address public override owner;
@@ -37,11 +37,11 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     }
 
     function getPoolId(address tokenX, address tokenY) public view override returns (uint256) {
-        return poolIds[tokenX][tokenY];
+        return _poolIds[tokenX][tokenY];
     }
 
     function getPoolInfo(uint256 poolId) public view override returns (PoolInfo memory) {
-        return pools[poolId];
+        return _pools[poolId];
     }
 
     /// @notice Create a liquidity pool
@@ -72,7 +72,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 tickX = (activeId + lowestId) >> 1; // midpoint, round down
         int24 tickY = (activeId + highestId) >> 1; // midpoint, round down
 
-        PoolInfo storage pool = pools[poolId];
+        PoolInfo storage pool = _pools[poolId];
         require(pool.tokenY == address(0), INVALID_ADDRESS()); // check if pool already exists
 
         TransferHelper.safeTransferFrom(tokenX, initiator, address(this), 512);
@@ -105,7 +105,13 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         emit PoolCreated(tokenX, tokenY, poolId);
     }
 
-    /// @dev flash loan function, free of any fee
+    /// @dev flash loan function
+    /// @notice retrieve the token from all liquidity pools combined, charged with a fixed 0.01% fee
+    /// @param recipient The address of the recipient
+    /// @param callback The address of the callback
+    /// @param token The address of the token
+    /// @param amount The amount of the token
+    /// @param deadline The deadline of the flash loan
     function flash(
         address recipient,
         address callback,
@@ -116,9 +122,11 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         if (amount != 0) {
             uint256 available = IERC20(token).balanceOf(address(this));
             require(available >= amount, INSUFFICIENT_LIQUIDITY());
+            uint256 fee = PriceMath.divUp(amount, 10000); // 0.01% fee
+            uint256 paybackAmount = amount + fee;
             TransferHelper.safeTransfer(token, recipient, amount);
-            IAX11FlashCallback(callback).flashCallback();
-            require(IERC20(token).balanceOf(address(this)) >= available, INSUFFICIENT_PAYBACK());
+            IAX11FlashCallback(callback).flashCallback(paybackAmount);
+            require(IERC20(token).balanceOf(address(this)) >= available + fee, INSUFFICIENT_PAYBACK());
         }
     }
 
@@ -135,8 +143,11 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort)
     {
         address sender = msg.sender;
-        int24 binId = poolInfo.activeId;
+        PoolInfo storage pool = _pools[option.poolId];
+        LpInfo storage totalSupply = _totalSupply[option.poolId];
+        require(pool.tokenY == address(0), INVALID_ADDRESS()); // check if pool already exists
 
+        int24 binId = pool.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         uint256 amountX;
@@ -144,38 +155,38 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 bal;
 
         if (option.amountForLongX != 0) {
-            bal = poolInfo.totalBalanceXLong;
-            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, _totalSupply.longX, bal);
+            bal = pool.totalBalanceXLong;
+            LPXLong = PriceMath.fullMulDiv(option.amountForLongX, totalSupply.longX, bal);
             amountX += option.amountForLongX;
             bal += option.amountForLongX;
-            poolInfo.totalBalanceXLong = bal.safe128();
+            pool.totalBalanceXLong = bal.safe128();
         }
         if (option.amountForLongY != 0) {
-            bal = poolInfo.totalBalanceYLong;
-            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, _totalSupply.longY, bal);
+            bal = pool.totalBalanceYLong;
+            LPYLong = PriceMath.fullMulDiv(option.amountForLongY, totalSupply.longY, bal);
             amountY += option.amountForLongY;
             bal += option.amountForLongY;
-            poolInfo.totalBalanceYLong = bal.safe128();
+            pool.totalBalanceYLong = bal.safe128();
         }
         if (option.amountForShortX != 0) {
-            bal = poolInfo.totalBalanceXShort;
-            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, _totalSupply.shortX, bal);
+            bal = pool.totalBalanceXShort;
+            LPXShort = PriceMath.fullMulDiv(option.amountForShortX, totalSupply.shortX, bal);
             amountX += option.amountForShortX;
             bal += option.amountForShortX;
-            poolInfo.totalBalanceXShort = bal.safe128();
+            pool.totalBalanceXShort = bal.safe128();
         }
         if (option.amountForShortY != 0) {
-            bal = poolInfo.totalBalanceYShort;
-            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, _totalSupply.shortY, bal);
+            bal = pool.totalBalanceYShort;
+            LPYShort = PriceMath.fullMulDiv(option.amountForShortY, totalSupply.shortY, bal);
             amountY += option.amountForShortY;
             bal += option.amountForShortY;
-            poolInfo.totalBalanceYShort = bal.safe128();
+            pool.totalBalanceYShort = bal.safe128();
         }
 
-        if (amountX != 0) TransferHelper.safeTransferFrom(poolInfo.tokenX, sender, address(this), amountX);
-        if (amountY != 0) TransferHelper.safeTransferFrom(poolInfo.tokenY, sender, address(this), amountY);
+        if (amountX != 0) TransferHelper.safeTransferFrom(pool.tokenX, sender, address(this), amountX);
+        if (amountY != 0) TransferHelper.safeTransferFrom(pool.tokenY, sender, address(this), amountY);
 
-        _mint(option.recipient, LPXLong, LPYLong, LPXShort, LPYShort);
+        _mint(option.recipient, option.poolId, LPXLong, LPYLong, LPXShort, LPYShort);
     }
 
     /// @dev Note: this function assumes that BalanceXLong,YLong, XShort, YShort will never be zero
@@ -184,14 +195,18 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         LiquidityOption calldata option
     ) external override ensure(option.deadline) nonReentrant noDelegateCall returns (uint256 amountX, uint256 amountY) {
         address sender = msg.sender;
-        int24 binId = poolInfo.activeId;
 
+        PoolInfo storage pool = _pools[option.poolId];
+        LpInfo storage totalSupply = _totalSupply[option.poolId];
+        require(pool.tokenY == address(0), INVALID_ADDRESS()); // check if pool already exists
+
+        int24 binId = pool.activeId;
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
-        uint256 balXLong = poolInfo.totalBalanceXLong;
-        uint256 balYLong = poolInfo.totalBalanceYLong;
-        uint256 balXShort = poolInfo.totalBalanceXShort;
-        uint256 balYShort = poolInfo.totalBalanceYShort;
+        uint256 balXLong = pool.totalBalanceXLong;
+        uint256 balYLong = pool.totalBalanceYLong;
+        uint256 balXShort = pool.totalBalanceXShort;
+        uint256 balYShort = pool.totalBalanceYShort;
 
         uint256 totalBalX = balXLong + balXShort;
         uint256 totalBalY = balYLong + balYShort;
@@ -202,36 +217,36 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 feeY;
 
         if (option.amountForLongX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, _totalSupply.longX);
-            feeX = FeeTier.getFee(uint24(binId - poolInfo.lowestId), amountDeducted);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, totalSupply.longX);
+            feeX = FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
             balXLong -= (amountDeducted - feeX);
             amountX += (amountDeducted - feeX);
             require(balXLong != 0, INSUFFICIENT_LIQUIDITY());
-            poolInfo.totalBalanceXLong = balXLong.safe128();
+            pool.totalBalanceXLong = balXLong.safe128();
         }
         if (option.amountForLongY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, _totalSupply.longY);
-            feeY = FeeTier.getFee(uint24(poolInfo.highestId - binId), amountDeducted);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, totalSupply.longY);
+            feeY = FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
             balYLong -= (amountDeducted - feeY);
             amountY += (amountDeducted - feeY);
             require(balYLong != 0, INSUFFICIENT_LIQUIDITY());
-            poolInfo.totalBalanceYLong = balYLong.safe128();
+            pool.totalBalanceYLong = balYLong.safe128();
         }
         if (option.amountForShortX != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, _totalSupply.shortX);
-            feeX = FeeTier.getFee(uint24(binId - poolInfo.lowestId), amountDeducted);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, totalSupply.shortX);
+            feeX = FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
             balXShort -= (amountDeducted - feeX);
             amountX += (amountDeducted - feeX);
             require(balXShort != 0, INSUFFICIENT_LIQUIDITY());
-            poolInfo.totalBalanceXShort = balXShort.safe128();
+            pool.totalBalanceXShort = balXShort.safe128();
         }
         if (option.amountForShortY != 0) {
-            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, _totalSupply.shortY);
-            feeY = FeeTier.getFee(uint24(poolInfo.highestId - binId), amountDeducted);
+            amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, totalSupply.shortY);
+            feeY = FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
             balYShort -= (amountDeducted - feeY);
             amountY += (amountDeducted - feeY);
             require(balYShort != 0, INSUFFICIENT_LIQUIDITY());
-            poolInfo.totalBalanceYShort = balYShort.safe128();
+            pool.totalBalanceYShort = balYShort.safe128();
         }
 
         totalBalX -= amountX;
@@ -242,10 +257,17 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         /// @dev if a user's share is too large that it covers almost the entire pool, they need to leave the minimum liquidity in the pool.
         /// so they may be able to withdraw 99.999xxx% of their funds.
 
-        _burn(sender, option.amountForLongX, option.amountForLongY, option.amountForShortX, option.amountForShortY);
+        _burn(
+            sender,
+            option.poolId,
+            option.amountForLongX,
+            option.amountForLongY,
+            option.amountForShortX,
+            option.amountForShortY
+        );
 
-        if (amountX != 0) TransferHelper.safeTransfer(poolInfo.tokenX, sender, amountX);
-        if (amountY != 0) TransferHelper.safeTransfer(poolInfo.tokenY, sender, amountY);
+        if (amountX != 0) TransferHelper.safeTransfer(pool.tokenX, option.recipient, amountX);
+        if (amountY != 0) TransferHelper.safeTransfer(pool.tokenY, option.recipient, amountY);
     }
 
     function swap(
