@@ -23,7 +23,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     mapping(uint256 poolId => PoolInfo) private _pools;
     mapping(address token => uint256 balance) private _globalBalances;
     mapping(address tokenX => mapping(address tokenY => uint256 poolId)) private _poolIds;
-    mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private _bins; // share is stored as 128.128 fixed point
+    mapping(int24 binId => mapping(uint256 poolId => BinInfo)) private _bins; // share is stored as 128.128 fixed point
 
     uint256 public override totalPools;
     address public override owner;
@@ -45,7 +45,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         return _pools[poolId];
     }
 
-    function getSweepable(address token) public view returns (uint256) {
+    function getSweepable(address token) public view override returns (uint256) {
         return IERC20(token).balanceOf(address(this)) - _globalBalances[token];
     }
 
@@ -75,7 +75,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         address tokenX,
         address tokenY,
         int24 activeId
-    ) external override noDelegateCall returns (uint256 poolId) {
+    ) external override nonReentrant noDelegateCall returns (uint256 poolId) {
         address initiator = msg.sender;
         require(tokenX < tokenY, INVALID_ADDRESS()); // required pre-sorting of tokens
         poolId = PoolHelper.computePoolId(tokenX, tokenY);
@@ -99,6 +99,9 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         TransferHelper.safeTransferFrom(tokenX, initiator, address(this), 512);
         TransferHelper.safeTransferFrom(tokenY, initiator, address(this), 512);
 
+        _globalBalances[tokenX] = 512;
+        _globalBalances[tokenY] = 512;
+
         pool.tokenX = tokenX;
         pool.tokenY = tokenY;
         pool.totalBalanceXLong = 256;
@@ -114,15 +117,13 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         pool.highestId = highestId;
         pool.tickX = tickX;
         pool.tickY = tickY;
-        pool.groupBinXFrom = activeId + 1;
-        pool.groupBinXTo = highestId;
-        pool.groupBinYFrom = activeId - 1;
-        pool.groupBinYTo = lowestId;
-        pool.groupBinXSharePerBin = binShare;
-        pool.groupBinYSharePerBin = binShare;
+
+        _bins[activeId + 1] = BinInfo({binShare: binShare * 255, lastBinId: highestId});
+        _bins[activeId - 1] = BinInfo({binShare: binShare * 255, lastBinId: lowestId});
 
         _mint(address(0), poolId, lpShare, lpShare, lpShare, lpShare);
         totalPools++;
+
         emit PoolCreated(tokenX, tokenY, poolId);
     }
 
@@ -188,12 +189,14 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 binId = pool.activeId;
 
         require(tokenY != address(0), INVALID_ADDRESS()); // check if pool already exists
+        require(option.callback != address(this), INVALID_ADDRESS());
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         uint256 amountX = option.amountForLongX + option.amountForShortX;
         uint256 amountY = option.amountForLongY + option.amountForShortY;
 
         if (option.callback == address(0)) {
+            // direct mint
             if (amountX != 0) TransferHelper.safeTransferFrom(pool.tokenX, msg.sender, address(this), amountX);
             if (amountY != 0) TransferHelper.safeTransferFrom(pool.tokenY, msg.sender, address(this), amountY);
         } else {
@@ -201,7 +204,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
             uint256 amountYBefore = IERC20(tokenY).balanceOf(address(this));
 
             IAX11Callback(option.callback).mintCallback(amountX, amountY);
-
+            // user performs actions in callback, and when they finish, they need to pay back the tokens
             if (amountX != 0)
                 require(
                     IERC20(tokenX).balanceOf(address(this)) >= amountXBefore + amountX,
@@ -252,9 +255,11 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         int24 binId = pool.activeId;
 
         require(tokenY != address(0), INVALID_ADDRESS()); // check if pool already exists
+        require(option.callback != address(this), INVALID_ADDRESS());
         require(binId >= option.minActiveId && binId <= option.maxActiveId, SLIPPAGE_EXCEEDED());
 
         if (option.callback == address(0)) {
+            // direct burn
             _burn(
                 msg.sender,
                 option.poolId,
@@ -264,13 +269,14 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
                 option.amountForShortY
             );
         } else {
-            //just transfer the lp tokens to address(0), see AX11Lp.sol
             IAX11Callback(option.callback).burnCallback(
                 option.amountForLongX,
                 option.amountForLongY,
                 option.amountForShortX,
                 option.amountForShortY
             );
+            // user performs actions in callback, and when they finish, they need to burn their lp tokens.
+            // To burn lp tokens, just transfer them to address(0), see AX11Lp.sol
 
             LpInfo storage totalSupplyAfter = _totalSupply[option.poolId];
 
@@ -301,12 +307,10 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         uint256 balXShort = pool.totalBalanceXShort;
         uint256 balYShort = pool.totalBalanceYShort;
         uint256 amountDeducted;
-        uint256 fee;
 
         if (option.amountForLongX != 0) {
             amountDeducted = PriceMath.fullMulDiv(option.amountForLongX, balXLong, totalSupplyBefore.longX);
-            fee = FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
-            amountDeducted -= fee;
+            amountDeducted -= FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
             balXLong -= amountDeducted;
             amountX += amountDeducted;
             require(balXLong != 0, INSUFFICIENT_LIQUIDITY());
@@ -314,8 +318,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
         if (option.amountForLongY != 0) {
             amountDeducted = PriceMath.fullMulDiv(option.amountForLongY, balYLong, totalSupplyBefore.longY);
-            fee = FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
-            amountDeducted -= fee;
+            amountDeducted -= FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
             balYLong -= amountDeducted;
             amountY += amountDeducted;
             require(balYLong != 0, INSUFFICIENT_LIQUIDITY());
@@ -323,8 +326,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
         if (option.amountForShortX != 0) {
             amountDeducted = PriceMath.fullMulDiv(option.amountForShortX, balXShort, totalSupplyBefore.shortX);
-            fee = FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
-            amountDeducted -= fee;
+            amountDeducted -= FeeTier.getFee(uint24(binId - pool.lowestId), amountDeducted);
             balXShort -= amountDeducted;
             amountX += amountDeducted;
             require(balXShort != 0, INSUFFICIENT_LIQUIDITY());
@@ -332,8 +334,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
         }
         if (option.amountForShortY != 0) {
             amountDeducted = PriceMath.fullMulDiv(option.amountForShortY, balYShort, totalSupplyBefore.shortY);
-            fee = FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
-            amountDeducted -= fee;
+            amountDeducted -= FeeTier.getFee(uint24(pool.highestId - binId), amountDeducted);
             balYShort -= amountDeducted;
             amountY += amountDeducted;
             require(balYShort != 0, INSUFFICIENT_LIQUIDITY());

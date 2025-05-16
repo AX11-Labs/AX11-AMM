@@ -12,6 +12,7 @@ interface IPool {
     error INSUFFICIENT_LIQUIDITY();
     error INVALID_ARRAY_LENGTH();
     error INSUFFICIENT_BALANCE();
+
     /// @notice Emitted when a new pool is created
     /// @param tokenX The first token of the pool (lower address)
     /// @param tokenY The second token of the pool (higher address)
@@ -42,22 +43,18 @@ interface IPool {
         int24 tickX;
         int24 tickY;
         // twab
-        int64 twabCumulative;
-        int64 last7daysCumulative;
-        // timestamp
-        uint32 lastBlockTimestamp;
-        uint32 last7daysTimestamp;
-        uint32 targetTimestamp;
-        // groupBin
-        int24 groupBinXFrom;
-        int24 groupBinXTo;
-        int24 groupBinYFrom;
-        int24 groupBinYTo;
-        int24 expandFrom;
-        int24 expandTo;
-        uint256 groupBinXSharePerBin;
-        uint256 groupBinYSharePerBin;
-        uint256 expandSharePerBin;
+        int80 twabCumulative;
+        uint56 lastTimestamp;
+        // 7-days twab
+        int80 last7daysCumulative;
+        uint56 last7daysTimestamp;
+        // ALM target timestamp
+        uint56 almTargetTimestamp;
+    }
+
+    struct BinInfo {
+        uint232 binShare;
+        int24 lastBinId;
     }
 
     // ---------- Function input struct ----------
@@ -74,6 +71,7 @@ interface IPool {
         int24 maxActiveId; // slippage
         uint256 deadline;
     }
+
     function owner() external returns (address);
     function setOwner(address newOwner) external;
     function totalPools() external view returns (uint256);
@@ -94,4 +92,5 @@ interface IPool {
     ) external returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
     function burn(LiquidityOption calldata option) external returns (uint256 amountX, uint256 amountY);
     function sweep(address[] calldata tokens, uint256[] calldata amounts, address[] calldata recipients) external;
+    function getSweepable(address token) external view returns (uint256);
 }
