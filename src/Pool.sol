@@ -21,6 +21,7 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
     using SafeCast for uint256;
 
     mapping(uint256 poolId => PoolInfo) private _pools;
+    mapping(address token => uint256 balance) private _globalBalances;
     mapping(address tokenX => mapping(address tokenY => uint256 poolId)) private _poolIds;
     mapping(int24 binId => mapping(uint256 poolId => uint256 binshare)) private _bins; // share is stored as 128.128 fixed point
 
@@ -42,6 +43,26 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     function getPoolInfo(uint256 poolId) public view override returns (PoolInfo memory) {
         return _pools[poolId];
+    }
+
+    function getSweepable(address token) public view returns (uint256) {
+        return IERC20(token).balanceOf(address(this)) - _globalBalances[token];
+    }
+
+    function sweep(
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        address[] calldata recipients
+    ) external override nonReentrant noDelegateCall {
+        require(msg.sender == owner, NOT_OWNER());
+        uint256 length = tokens.length;
+        require(length == amounts.length && length == recipients.length, INVALID_ARRAY_LENGTH());
+        for (uint256 i; i < length; i++) {
+            uint256 amount = amounts[i];
+            address token = tokens[i];
+            require(amount <= getSweepable(token), INSUFFICIENT_BALANCE());
+            TransferHelper.safeTransfer(token, recipients[i], amount);
+        }
     }
 
     /// @notice Create a liquidity pool

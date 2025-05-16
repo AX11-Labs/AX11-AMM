@@ -11,6 +11,7 @@ interface IPool {
     error BURN_INSUFFICIENT_PAYBACK();
     error INSUFFICIENT_LIQUIDITY();
     error INVALID_ARRAY_LENGTH();
+    error INSUFFICIENT_BALANCE();
     /// @notice Emitted when a new pool is created
     /// @param tokenX The first token of the pool (lower address)
     /// @param tokenY The second token of the pool (higher address)
@@ -92,4 +93,5 @@ interface IPool {
         LiquidityOption calldata option
     ) external returns (uint256 LPXLong, uint256 LPYLong, uint256 LPXShort, uint256 LPYShort);
     function burn(LiquidityOption calldata option) external returns (uint256 amountX, uint256 amountY);
+    function sweep(address[] calldata tokens, uint256[] calldata amounts, address[] calldata recipients) external;
 }
