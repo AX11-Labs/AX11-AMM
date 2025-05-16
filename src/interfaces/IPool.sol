@@ -10,7 +10,7 @@ interface IPool {
     error MINT_INSUFFICIENT_PAYBACK();
     error BURN_INSUFFICIENT_PAYBACK();
     error INSUFFICIENT_LIQUIDITY();
-
+    error INVALID_ARRAY_LENGTH();
     /// @notice Emitted when a new pool is created
     /// @param tokenX The first token of the pool (lower address)
     /// @param tokenY The second token of the pool (higher address)
@@ -80,7 +80,13 @@ interface IPool {
     function getPoolInfo(uint256 poolId) external view returns (PoolInfo memory);
     function getPoolId(address tokenX, address tokenY) external view returns (uint256);
 
-    function flash(address recipient, address callback, address token, uint256 amount, uint256 deadline) external;
+    function flash(
+        address[] calldata recipients,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        address callback,
+        uint256 deadline
+    ) external;
 
     function mint(
         LiquidityOption calldata option

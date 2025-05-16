@@ -107,26 +107,42 @@ contract Pool is AX11Lp, IPool, ReentrancyGuard, Deadline, NoDelegateCall {
 
     /// @dev flash loan function
     /// @notice retrieve the token from all liquidity pools combined, charged with a fixed 0.01% fee
-    /// @param recipient The address of the recipient
+    /// @param recipients The address of the recipient
+    /// @param tokens The address of the token
+    /// @param amounts The amount of the token
     /// @param callback The address of the callback
-    /// @param token The address of the token
-    /// @param amount The amount of the token
     /// @param deadline The deadline of the flash loan
     function flash(
-        address recipient,
+        address[] calldata recipients,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
         address callback,
-        address token,
-        uint256 amount,
         uint256 deadline
     ) external override ensure(deadline) nonReentrant noDelegateCall {
-        if (amount != 0) {
+        uint256 length = recipients.length;
+        require(length == tokens.length && length == amounts.length, INVALID_ARRAY_LENGTH());
+        require(callback != address(this), INVALID_ADDRESS());
+        uint256[] memory paybackAmounts = new uint256[](length);
+        uint256[] memory newBalances = new uint256[](length);
+        address token;
+        uint256 i;
+        for (i; i < length; i++) {
+            token = tokens[i];
+            uint256 amount = amounts[i];
             uint256 available = IERC20(token).balanceOf(address(this));
             require(available >= amount, INVALID_AMOUNT());
             uint256 fee = PriceMath.divUp(amount, 10000); // 0.01% fee
-            uint256 paybackAmount = amount + fee;
-            TransferHelper.safeTransfer(token, recipient, amount);
-            IAX11Callback(callback).flashCallback(paybackAmount);
-            require(IERC20(token).balanceOf(address(this)) >= available + fee, FLASH_INSUFFICIENT_PAYBACK());
+            paybackAmounts[i] = amount + fee;
+            newBalances[i] = available + fee;
+            TransferHelper.safeTransfer(token, recipients[i], amount);
+        }
+
+        IAX11Callback(callback).flashCallback(paybackAmounts);
+        // user performs actions in callback, and when they finish, they need to pay back the tokens
+
+        for (i = 0; i < length; i++) {
+            token = tokens[i];
+            require(IERC20(token).balanceOf(address(this)) >= newBalances[i], FLASH_INSUFFICIENT_PAYBACK());
         }
     }
 
